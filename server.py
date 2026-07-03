@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
-"""B站UP主视频速览 Web 服务 - 支持登录+关注UP主"""
+"""B站UP主视频速览 Web 服务 - 支持登录+关注UP主+AI概括+字幕"""
 
-import json
-import re
-import hashlib
-import time
-import io
-import qrcode
-import base64
+import json, re, hashlib, time, io, base64, os
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs, urlencode
-
 import requests
 
+try:
+    import qrcode
+    QR_AVAILABLE = True
+except:
+    QR_AVAILABLE = False
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except:
+    PIL_AVAILABLE = False
+
 PORT = 3457
+
+# ── 环境变量 / 配置 ──────────────────────────────────
+LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
+LLM_API_BASE = os.environ.get('LLM_API_BASE', 'https://api.openai.com/v1')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'gpt-4o-mini')
 
 MIXIN_KEY_ENC_TAB = [
     46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,
@@ -27,9 +37,19 @@ HEADERS = {
 }
 _public_session = None
 _login_session = None
-_login_info = None  # {uid, uname, face}
+_login_info = None
 _wbi_cache = None
 _wbi_cache_time = 0
+
+def _fix_url(url):
+    """统一转为 https:// 防止混合内容"""
+    if not url:
+        return url
+    if url.startswith('//'):
+        return 'https:' + url
+    if url.startswith('http://'):
+        return url.replace('http://', 'https://', 1)
+    return url
 
 def _ensure_public():
     global _public_session
@@ -50,7 +70,6 @@ def _ensure_login():
     return _login_session
 
 def _get_session():
-    """优先使用登录session"""
     if _login_session is not None and _login_info is not None:
         return _login_session
     return _ensure_public()
@@ -88,12 +107,62 @@ def _bili_get(path, params=None):
         raise Exception(f"B站API错误({data.get('code')}): {data.get('message','unknown')}")
     return data
 
+# ── LLM 概括 ────────────────────────────────────────
+def summarize_video(vid):
+    """调用LLM对视频进行概括"""
+    if not LLM_API_KEY:
+        return {'topic': vid.get('title',''), 'summary': '未配置AI Key，请在服务器环境变量设置 LLM_API_KEY', 'recommendation': '可选', 'category': '未知'}
+    try:
+        prompt = f"""对以下B站视频进行简短概括（30-60字）并给出推荐度：
+
+标题：{vid.get('title','')}
+简介：{(vid.get('description','') or vid.get('desc',''))[:300]}
+时长：{vid.get('length','')}
+
+请用JSON输出：{{"topic":"一句话主题","summary":"30-60字概括","category":"分类标签","recommendation":"强烈推荐/推荐/可选/可跳过"}}"""
+        r = requests.post(f"{LLM_API_BASE}/chat/completions", headers={"Authorization": f"Bearer {LLM_API_KEY}"}, json={"model": LLM_MODEL, "messages": [{"role":"user","content":prompt}], "temperature":0.3, "max_tokens":200}, timeout=20)
+        d = r.json()
+        txt = d['choices'][0]['message']['content'].strip()
+        if '```json' in txt:
+            txt = txt.split('```json')[1].split('```')[0]
+        elif '```' in txt:
+            txt = txt.split('```')[1].split('```')[0]
+        return json.loads(txt)
+    except Exception as e:
+        return {'topic': vid.get('title',''), 'summary': f'AI概括失败: {str(e)[:50]}', 'recommendation': '可选', 'category': '未知'}
+
+# ── 字幕获取 ────────────────────────────────────────
+def get_subtitle(bvid):
+    """获取B站视频字幕"""
+    try:
+        # 1. 获取视频信息（cid）
+        info = _bili_get('/x/web-interface/view', {'bvid': bvid})
+        cid = info['data']['cid']
+        # 2. 获取播放器信息（字幕列表）
+        player = _bili_get('/x/player/v2', {'bvid': bvid, 'cid': cid})
+        subs = player.get('data', {}).get('subtitle', {}).get('subtitles', [])
+        if not subs:
+            return {'subtitles': [], 'text': '该视频没有字幕'}
+        # 3. 获取第一个字幕
+        sub_url = _fix_url(subs[0]['subtitle_url'])
+        sub_resp = requests.get(sub_url, timeout=15)
+        sub_data = sub_resp.json()
+        body = sub_data.get('body', [])
+        text = '\n'.join([f"{i+1}. {item['content']}" for i, item in enumerate(body[:200])])  # 最多200句
+        if len(body) > 200:
+            text += f'\n...（共{len(body)}句，省略剩余）'
+        return {'subtitles': [{'lan': subs[0].get('lan',''), 'lan_doc': subs[0].get('lan_doc','')}], 'text': text}
+    except Exception as e:
+        return {'subtitles': [], 'text': f'获取字幕失败: {str(e)}'}
+
 # ── API 处理 ────────────────────────────────────────
 def handle_api(path, query):
     global _login_session, _login_info
 
     # ---- 登录 ----
     if path == '/api/login/generate':
+        if not QR_AVAILABLE:
+            return 500, {'error': 'qrcode模块未安装'}
         s = _ensure_login()
         resp = s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/generate', timeout=10)
         data = resp.json()
@@ -101,7 +170,6 @@ def handle_api(path, query):
             return 500, {'error': data.get('message','生成二维码失败')}
         qr_url = data['data']['url']
         qr_key = data['data']['qrcode_key']
-        # 生成二维码图片 base64
         img = qrcode.make(qr_url)
         buf = io.BytesIO()
         img.save(buf, format='PNG')
@@ -113,25 +181,17 @@ def handle_api(path, query):
         if not key:
             return 400, {'error': '缺少 key'}
         s = _ensure_login()
-        resp = s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/poll',
-                      params={'qrcode_key': key}, timeout=10)
+        resp = s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/poll', params={'qrcode_key': key}, timeout=10)
         data = resp.json()
         code = data.get('data', {}).get('code', -1)
-        # 登录成功，提取cookie
-        if code == 0 and 'Set-Cookie' in str(resp.headers):
-            # 获取登录用户信息
+        if code == 0:
             try:
                 nav = s.get('https://api.bilibili.com/x/web-interface/nav', timeout=10).json()
                 if nav.get('data', {}).get('isLogin'):
-                    _login_info = {
-                        'uid': nav['data']['mid'],
-                        'uname': nav['data']['uname'],
-                        'face': nav['data'].get('face', ''),
-                    }
+                    _login_info = {'uid': nav['data']['mid'], 'uname': nav['data']['uname'], 'face': _fix_url(nav['data'].get('face',''))}
             except:
                 pass
-        return 200, {'code': code, 'message': data.get('data', {}).get('message',''),
-                      'user': _login_info}
+        return 200, {'code': code, 'message': data.get('data', {}).get('message',''), 'user': _login_info}
 
     if path == '/api/login/info':
         return 200, {'logged_in': bool(_login_info), 'user': _login_info}
@@ -148,22 +208,13 @@ def handle_api(path, query):
         page = int(query.get('page', ['1'])[0])
         try:
             s = _login_session
-            resp = s.get('https://api.bilibili.com/x/relation/followings',
-                          params={'vmid': _login_info['uid'], 'pn': page, 'ps': 50,
-                                  'order': 'desc', 'order_type': 'attention'},
-                          timeout=15)
+            resp = s.get('https://api.bilibili.com/x/relation/followings', params={'vmid': _login_info['uid'], 'pn': page, 'ps': 50, 'order': 'desc', 'order_type': 'attention'}, timeout=15)
             data = resp.json()
             if data.get('code') != 0:
                 return 500, {'error': data.get('message', 'unknown')}
             users = []
             for u in data.get('data', {}).get('list', []):
-                face = u.get('face', '')
-                if face and face.startswith('//'):
-                    face = 'https:' + face
-                users.append({
-                    'mid': u['mid'], 'uname': u['uname'],
-                    'sign': u.get('sign', ''), 'face': face,
-                })
+                users.append({'mid': u['mid'], 'uname': u['uname'], 'sign': u.get('sign',''), 'face': _fix_url(u.get('face',''))})
             return 200, {'users': users, 'total': data.get('data',{}).get('total',0)}
         except Exception as e:
             return 500, {'error': str(e)}
@@ -174,24 +225,15 @@ def handle_api(path, query):
         if not name:
             return 400, {'error': '缺少 name 参数'}
         try:
-            data = _bili_get('/x/web-interface/search/type', {
-                'search_type': 'bili_user', 'keyword': name,
-            })
+            data = _bili_get('/x/web-interface/search/type', {'search_type': 'bili_user', 'keyword': name})
             results = []
             for u in (data.get('data', {}).get('result', []) or []):
-                face = u.get('upic', '')
-                if face and face.startswith('//'):
-                    face = 'https:' + face
-                results.append({
-                    'mid': u['mid'], 'uname': u['uname'],
-                    'sign': u.get('usign', ''), 'fans': u.get('fans', 0),
-                    'videos': u.get('videos', 0), 'face': face,
-                })
+                results.append({'mid': u['mid'], 'uname': u['uname'], 'sign': u.get('usign',''), 'fans': u.get('fans',0), 'videos': u.get('videos',0), 'face': _fix_url(u.get('upic',''))})
             return 200, {'results': results}
         except Exception as e:
             return 500, {'error': str(e)}
 
-    # ---- 视频 ----
+    # ---- 视频列表 ----
     if path == '/api/all_videos':
         mid = int(query.get('mid', ['0'])[0])
         max_pages = int(query.get('pages', ['2'])[0])
@@ -207,15 +249,12 @@ def handle_api(path, query):
                 vlist = data['data']['list']['vlist']
                 count = data['data']['page']['count']
                 for v in vlist:
-                    pic = v.get('pic', '')
-                    if pic and pic.startswith('//'):
-                        pic = 'https:' + pic
                     all_videos.append({
                         'bvid': v['bvid'], 'title': v['title'],
-                        'description': v.get('description', ''),
+                        'description': v.get('description',''),
                         'length': v['length'], 'created': v['created'],
-                        'play': v.get('play', 0), 'comment': v.get('comment', 0),
-                        'video_review': v.get('video_review', 0), 'pic': pic,
+                        'play': v.get('play',0), 'comment': v.get('comment',0),
+                        'video_review': v.get('video_review',0), 'pic': _fix_url(v.get('pic','')),
                     })
             except Exception as e:
                 error_msg = str(e)
@@ -228,6 +267,32 @@ def handle_api(path, query):
             result['error'] = error_msg
             result['count'] = count
         return 200, result
+
+    # ---- AI概括 ----
+    if path == '/api/summarize':
+        bvid = query.get('bvid', [''])[0]
+        if not bvid:
+            return 400, {'error': '缺少 bvid'}
+        try:
+            # 获取视频详情
+            info = _bili_get('/x/web-interface/view', {'bvid': bvid})
+            vid = info['data']
+            vid_data = {
+                'title': vid['title'], 'desc': vid.get('desc',''),
+                'length': vid['duration'], 'view': vid.get('stat',{}).get('view',0),
+                'tname': vid.get('tname',''), 'tags': [t['tag_name'] for t in vid.get('tags',[])][:10]
+            }
+            summary = summarize_video(vid_data)
+            return 200, summary
+        except Exception as e:
+            return 500, {'error': str(e)}
+
+    # ---- 字幕 ----
+    if path == '/api/subtitle':
+        bvid = query.get('bvid', [''])[0]
+        if not bvid:
+            return 400, {'error': '缺少 bvid'}
+        return 200, get_subtitle(bvid)
 
     return 404, {'error': '未知 API'}
 
@@ -246,17 +311,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .header h1{font-size:22px;text-align:center}
 .header .sub{font-size:13px;opacity:.85;text-align:center;margin:6px 0 0}
 .login-bar{display:flex;justify-content:center;align-items:center;gap:8px;padding:12px;background:#fff;border-bottom:1px solid #eee;position:sticky;top:82px;z-index:99}
-.login-bar .avatar{width:32px;height:32px;border-radius:50%;background:#eee}
+.login-bar .avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle}
 .login-bar .uname{font-size:14px;font-weight:500}
 .login-bar button{border:1px solid #fb7299;background:#fff;color:#fb7299;padding:6px 16px;border-radius:16px;font-size:13px;cursor:pointer}
 .login-bar button.logout{color:#999;border-color:#ddd}
-
 .search-box{display:flex;gap:8px;padding:12px;background:#fff}
 .search-box input{flex:1;padding:10px 14px;border:1px solid #ddd;border-radius:20px;font-size:15px;outline:none}
 .search-box input:focus{border-color:#fb7299}
 .search-box button{background:#fb7299;border:none;color:#fff;padding:10px 20px;border-radius:20px;font-size:15px;cursor:pointer}
 #upInfo{background:#fff;padding:16px;margin:12px;border-radius:12px;display:none;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-#upInfo img{width:48px;height:48px;border-radius:50%}
+#upInfo img{width:48px;height:48px;border-radius:50%;object-fit:cover}
 #upInfo .name{font-size:16px;font-weight:600}
 #upInfo .meta{font-size:12px;color:#999}
 #upInfo .sign{font-size:12px;color:#666;margin-top:4px}
@@ -266,12 +330,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .follow-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 .follow-card{background:#fff;border-radius:10px;padding:10px;text-align:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .1s}
 .follow-card:active{transform:scale(.96)}
-.follow-card img{width:40px;height:40px;border-radius:50%;margin-bottom:6px}
+.follow-card img{width:40px;height:40px;border-radius:50%;object-fit:cover;margin-bottom:6px}
 .follow-card .uname{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .content{padding:0 12px}
-.card{background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;cursor:pointer;transition:transform .15s}
-.card:active{transform:scale(.98)}
+.card{background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card .top{display:flex;cursor:pointer;transition:background .15s}
+.card .top:active{background:#fafafa}
 .card .thumb{width:120px;min-width:120px;height:75px;background:#eee;position:relative;overflow:hidden}
 .card .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .card .dur{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.75);color:#fff;font-size:10px;padding:2px 5px;border-radius:3px}
@@ -280,6 +345,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .card .meta{font-size:11px;color:#999;margin-bottom:4px;display:flex;gap:10px;flex-wrap:wrap}
 .card .meta span{white-space:nowrap}
 .card .desc{font-size:12px;color:#666;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card .detail{display:none;padding:12px;border-top:1px solid #f0f0f0;background:#fafafa}
+.card .detail.show{display:block}
+.card .detail .summary{font-size:13px;color:#333;line-height:1.6;margin-bottom:8px}
+.card .detail .tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.card .detail .tag{background:#e3f2fd;color:#1976d2;padding:3px 10px;border-radius:12px;font-size:11px}
+.card .detail .subtitle-box{background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:10px;max-height:200px;overflow-y:auto;font-size:12px;color:#555;line-height:1.7;white-space:pre-wrap}
+.card .detail .btn-row{display:flex;gap:8px;margin-bottom:10px}
+.card .detail .btn-row button{flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;color:#666;border:1px solid #ddd}
+.card .detail .btn-row button.primary{background:#fb7299;color:#fff;border:none}
+.card .detail .loading{font-size:12px;color:#999;text-align:center;padding:10px}
+.card .detail .error{font-size:12px;color:#e74c3c;text-align:center;padding:10px}
 .result-stats{text-align:center;font-size:12px;color:#999;padding:4px 0 8px}
 .loading{padding:60px;text-align:center;color:#999}
 .loading .spinner{display:inline-block;width:32px;height:32px;border:3px solid #eee;border-top-color:#fb7299;border-radius:50%;animation:spin .8s linear infinite}
@@ -298,7 +374,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </style>
 </head>
 <body>
-<div class="header"><h1>📺 B站UP主视频速览</h1><div class="sub">登录后查看关注UP主，一键浏览视频</div></div>
+<div class="header"><h1>📺 B站UP主视频速览</h1><div class="sub">登录后查看关注UP主，AI概括+字幕一键获取</div></div>
 
 <div class="login-bar" id="loginBar">
   <span id="loginStatus" style="font-size:13px;color:#999">未登录</span>
@@ -334,145 +410,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </div>
 
 <script>
-var POLL_INTERVAL = null;
-var LOGGED_IN = false;
-var LOGIN_UID = null;
-
-function fmt(n){if(n>=1e4)return (n/1e4).toFixed(1)+'万';return n.toLocaleString()}
+var POLL_INTERVAL=null,LOGGED_IN=false,LOGIN_UID=null;
+function fmt(n){if(n>=1e4)return(n/1e4).toFixed(1)+'万';return n.toLocaleString()}
 function ts(d){return new Date(d*1000).toLocaleDateString('zh-CN')}
 
-async function checkLogin(){
-  try{
-    var r=await fetch('/api/login/info');
-    var d=await r.json();
-    if(d.logged_in){
-      LOGGED_IN = true;
-      LOGIN_UID = d.user.uid;
-      document.getElementById('loginStatus').innerHTML='<img src="'+d.user.face+'" class="avatar" style="display:inline-block;vertical-align:middle"> <span class="uname">'+d.user.uname+'</span>';
-      document.getElementById('loginBar').innerHTML=document.getElementById('loginStatus').outerHTML+'<button class="logout" onclick="logout()">退出</button>';
-      loadFollowings();
-    }
-  }catch(e){}
-}
+async function checkLogin(){try{var r=await fetch('/api/login/info');var d=await r.json();if(d.logged_in){LOGGED_IN=true;LOGIN_UID=d.user.uid;document.getElementById('loginBar').innerHTML='<img src="'+d.user.face+'" class="avatar"> <span class="uname">'+d.user.uname+'</span> <button class="logout" onclick="logout()">退出</button>';loadFollowings()}}catch(e){}}
 
-async function showLogin(){
-  document.getElementById('loginModal').classList.add('show');
-  document.getElementById('qrStatus').textContent='正在生成二维码...';
-  try{
-    var r=await fetch('/api/login/generate');
-    var d=await r.json();
-    if(d.error){alert(d.error);closeLogin();return}
-    document.getElementById('qrImage').src=d.qr_image;
-    document.getElementById('qrStatus').textContent='请用B站APP扫码';
-    POLL_INTERVAL = setInterval(function(){pollLogin(d.qrcode_key)}, 2000);
-  }catch(e){
-    document.getElementById('qrStatus').textContent='生成失败: '+e.message;
-  }
-}
+async function showLogin(){document.getElementById('loginModal').classList.add('show');document.getElementById('qrStatus').textContent='正在生成...';try{var r=await fetch('/api/login/generate');var d=await r.json();if(d.error){alert(d.error);closeLogin();return}document.getElementById('qrImage').src=d.qr_image;document.getElementById('qrStatus').textContent='请用B站APP扫码';POLL_INTERVAL=setInterval(function(){pollLogin(d.qrcode_key)},2000)}catch(e){document.getElementById('qrStatus').textContent='生成失败:'+e.message}}
+async function pollLogin(key){try{var r=await fetch('/api/login/poll?key='+key);var d=await r.json();if(d.code===0&&d.user){clearInterval(POLL_INTERVAL);closeLogin();checkLogin()}else if(d.code===86038){document.getElementById('qrStatus').textContent='二维码已过期';clearInterval(POLL_INTERVAL)}else if(d.code===86090){document.getElementById('qrStatus').textContent='已扫码，请确认'}else if(d.code===86101){document.getElementById('qrStatus').textContent='等待扫码...'}}catch(e){}}
+function closeLogin(){document.getElementById('loginModal').classList.remove('show');if(POLL_INTERVAL){clearInterval(POLL_INTERVAL);POLL_INTERVAL=null}}
+async function logout(){await fetch('/api/login/logout');LOGGED_IN=false;LOGIN_UID=null;location.reload()}
 
-async function pollLogin(key){
-  try{
-    var r=await fetch('/api/login/poll?key='+key);
-    var d=await r.json();
-    if(d.code===0 && d.user){
-      clearInterval(POLL_INTERVAL);
-      closeLogin();
-      checkLogin();
-    }else if(d.code===86038){
-      document.getElementById('qrStatus').textContent='二维码已过期，请重新生成';
-      clearInterval(POLL_INTERVAL);
-    }else if(d.code===86090){
-      document.getElementById('qrStatus').textContent='已扫码，请在手机上确认';
-    }else if(d.code===86101){
-      document.getElementById('qrStatus').textContent='等待扫码...';
-    }
-  }catch(e){}
-}
+async function loadFollowings(){try{var r=await fetch('/api/followings?page=1');var d=await r.json();if(d.error)return;document.getElementById('followSection').style.display='block';var h='';d.users.forEach(function(u){h+='<div class="follow-card" onclick="openUP('+u.mid+',\''+u.uname+'\',\''+u.face+'\',\''+(u.sign||'').replace(/'/g,'')+'\')">'+'<img src="'+u.face+'">'+'<div class="uname">'+u.uname+'</div></div>'});document.getElementById('followList').innerHTML=h}catch(e){}}
 
-function closeLogin(){
-  document.getElementById('loginModal').classList.remove('show');
-  if(POLL_INTERVAL){clearInterval(POLL_INTERVAL);POLL_INTERVAL=null}
-}
+function openUP(mid,uname,face,sign){document.getElementById('searchInput').value='';document.getElementById('upInfo').innerHTML='<img src="'+face+'"><div><div class="name">'+uname+'</div><div class="sign">'+sign.slice(0,60)+'</div></div>';document.getElementById('upInfo').style.display='flex';document.getElementById('stats').textContent='';loadVideos(mid)}
 
-async function logout(){
-  await fetch('/api/login/logout');
-  LOGGED_IN=false; LOGIN_UID=null;
-  location.reload();
-}
+async function search(){var name=document.getElementById('searchInput').value.trim();if(!name)return;document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">搜索中...</p></div>';document.getElementById('upInfo').style.display='none';document.getElementById('stats').textContent='';try{var r=await fetch('/api/search_up?name='+encodeURIComponent(name));var d=await r.json();if(d.error||!d.results||!d.results.length){document.getElementById('list').innerHTML='<div class="error">未找到</div>';return}var up=d.results[0];openUP(up.mid,up.uname,up.face,up.sign)}catch(e){document.getElementById('list').innerHTML='<div class="error">搜索失败</div>'}}
 
-async function loadFollowings(){
-  try{
-    var r=await fetch('/api/followings?page=1');
-    var d=await r.json();
-    if(d.error){return}
-    document.getElementById('followSection').style.display='block';
-    var h='';
-    d.users.forEach(function(u){
-      h+='<div class="follow-card" onclick="openUP('+u.mid+',\''+u.uname+'\',\''+u.face+'\',\''+(u.sign||'').replace(/'/g,'')+'\')">'+
-        '<img src="'+u.face+'" onerror="this.style.background=\'#ccc\'">'+
-        '<div class="uname">'+u.uname+'</div></div>';
-    });
-    document.getElementById('followList').innerHTML=h;
-  }catch(e){}
-}
+async function loadVideos(mid){document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">加载视频...</p></div>';try{var r=await fetch('/api/all_videos?mid='+mid+'&pages=2');var d=await r.json();if(d.error&&d.total===0){document.getElementById('list').innerHTML='<div class="error">获取失败<br><small>'+d.error+'</small><br><a href="https://space.bilibili.com/'+mid+'" class="bili-link">打开B站主页</a></div>';return}var txt='共 '+d.total+' 个视频';if(d.count>d.total)txt+=' (总 '+d.count+' 个)';if(d.error)txt+=' | ⚠️ '+d.error.slice(0,20);document.getElementById('stats').textContent=txt;render(d.videos)}catch(e){document.getElementById('list').innerHTML='<div class="error">加载失败</div>'}}
 
-function openUP(mid, uname, face, sign){
-  document.getElementById('searchInput').value='';
-  document.getElementById('upInfo').innerHTML='<img src="'+face+'" onerror="this.style.display=\'none\'"><div><div class="name">'+uname+'</div><div class="sign">'+sign.slice(0,60)+'</div></div>';
-  document.getElementById('upInfo').style.display='flex';
-  document.getElementById('stats').textContent='';
-  loadVideos(mid);
-}
+function render(videos){var h='';videos.forEach(function(v,idx){h+='<div class="card" id="card_'+idx+'">'+'<div class="top" onclick="toggleDetail('+idx+')">'+'<div class="thumb"><img src="'+v.pic+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="dur">'+v.length+'</span></div>'+'<div class="info"><div class="title">'+v.title+'</div>'+'<div class="meta"><span>📅 '+ts(v.created)+'</span><span>👁 '+fmt(v.play)+'</span><span>💬 '+fmt(v.comment)+'</span></div>'+'<div class="desc">'+(v.description||'')+'</div></div></div>'+'<div class="detail" id="detail_'+idx+'">'+'<div class="btn-row"><button class="primary" onclick="loadSummary('+idx+',\''+v.bvid+'\')">🤖 AI概括</button><button onclick="loadSubtitle('+idx+',\''+v.bvid+'\')">📜 字幕</button><button onclick="window.open(\'https://www.bilibili.com/video/'+v.bvid+'\')">▶️ 播放</button></div>'+'<div id="sum_'+idx+'"></div><div id="sub_'+idx+'"></div>'+'</div></div>'});document.getElementById('list').innerHTML=h||'<div class="error">暂无视频</div>'}
 
-async function search(){
-  var name=document.getElementById('searchInput').value.trim();
-  if(!name)return;
-  document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">正在搜索UP主...</p></div>';
-  document.getElementById('upInfo').style.display='none';
-  document.getElementById('stats').textContent='';
-  try{
-    var r=await fetch('/api/search_up?name='+encodeURIComponent(name));
-    var d=await r.json();
-    if(d.error){document.getElementById('list').innerHTML='<div class="error">搜索失败<br><small>'+d.error+'</small></div>';return}
-    if(!d.results||d.results.length===0){document.getElementById('list').innerHTML='<div class="error">未找到UP主</div>';return}
-    var up=d.results[0];
-    openUP(up.mid, up.uname, up.face, up.sign);
-  }catch(e){
-    document.getElementById('list').innerHTML='<div class="error">搜索失败: '+e.message+'</div>';
-  }
-}
+function toggleDetail(idx){var el=document.getElementById('detail_'+idx);el.classList.toggle('show')}
 
-async function loadVideos(mid){
-  document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p style="margin-top:12px">正在获取视频列表...</p></div>';
-  try{
-    var r=await fetch('/api/all_videos?mid='+mid+'&pages=2');
-    var d=await r.json();
-    if(d.error && d.total===0){
-      document.getElementById('list').innerHTML='<div class="error">视频列表获取失败<br><small>'+d.error+'</small><br><a href="https://space.bilibili.com/'+mid+'" class="bili-link">👉 打开B站主页</a></div>';
-      return;
-    }
-    var txt='共 '+d.total+' 个视频';
-    if(d.count>d.total)txt+=' (总 '+d.count+' 个)';
-    if(d.error)txt+=' | ⚠️ '+d.error.slice(0,20);
-    document.getElementById('stats').textContent=txt;
-    render(d.videos);
-  }catch(e){
-    document.getElementById('list').innerHTML='<div class="error">加载失败<br><small>'+e.message+'</small></div>';
-  }
-}
+async function loadSummary(idx,bvid){var box=document.getElementById('sum_'+idx);box.innerHTML='<div class="loading">🤖 AI分析中...</div>';try{var r=await fetch('/api/summarize?bvid='+bvid);var d=await r.json();var h='<div class="summary">';if(d.topic)h+='<div style="font-weight:600;color:#fb7299;margin-bottom:4px">'+d.topic+'</div>';if(d.category)h+='<div class="tags"><span class="tag">'+d.category+'</span>';if(d.recommendation)h+='<span class="tag">'+d.recommendation+'</span></div>';if(d.summary)h+='<div>'+d.summary+'</div>';h+='</div>';box.innerHTML=h}catch(e){box.innerHTML='<div class="error">AI概括失败</div>'}}
 
-function render(videos){
-  var h='';
-  videos.forEach(function(v){
-    h+='<div class="card" onclick="window.open(\'https://www.bilibili.com/video/'+v.bvid+'\')">'+
-      '<div class="thumb">'+(v.pic?'<img src="'+v.pic+'" loading="lazy">':'')+'<span class="dur">'+v.length+'</span></div>'+
-      '<div class="info"><div class="title">'+v.title+'</div>'+
-      '<div class="meta"><span>📅 '+ts(v.created)+'</span><span>👁 '+fmt(v.play)+'</span><span>💬 '+fmt(v.comment)+'</span></div>'+
-      '<div class="desc">'+(v.description||'')+'</div></div></div>';
-  });
-  document.getElementById('list').innerHTML=h||'<div class="error">该UP主暂无视频</div>';
-  window.scrollTo({top:document.getElementById('upInfo').offsetTop-90,behavior:'smooth'});
-}
+async function loadSubtitle(idx,bvid){var box=document.getElementById('sub_'+idx);box.innerHTML='<div class="loading">📜 获取字幕中...</div>';try{var r=await fetch('/api/subtitle?bvid='+bvid);var d=await r.json();if(d.subtitles&&d.subtitles.length){box.innerHTML='<div class="subtitle-box">'+d.text+'</div>'}else{box.innerHTML='<div class="error">'+d.text+'</div>'}}catch(e){box.innerHTML='<div class="error">字幕获取失败</div>'}}
 
 checkLogin();
 </script>
@@ -510,7 +473,4 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
 
 if __name__=='__main__':
-    import os
-    # 使 qrcode 使用 PIL 内置字体
-    os.environ.setdefault('PIL_FONT_FILE','')
     HTTPServer(('0.0.0.0',PORT),Handler).serve_forever()
