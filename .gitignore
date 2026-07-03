@@ -1,0 +1,7 @@
+# B站视频
+__pycache__/
+*.pyc
+.env
+output/
+.venv/
+.DS_Store
