@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>B站UP主视频速览</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh;padding-bottom:80px}
+.header{background:linear-gradient(135deg,#fb7299,#fc8f6e);color:#fff;padding:24px 16px 20px;position:sticky;top:0;z-index:100}
+.header h1{font-size:22px;text-align:center}
+.header .sub{font-size:13px;opacity:.85;text-align:center;margin:6px 0 0}
+.login-bar{display:flex;justify-content:center;align-items:center;gap:8px;padding:12px;background:#fff;border-bottom:1px solid #eee;position:sticky;top:82px;z-index:99}
+.login-bar .avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;vertical-align:middle}
+.login-bar .uname{font-size:14px;font-weight:500}
+.login-bar button{border:1px solid #fb7299;background:#fff;color:#fb7299;padding:6px 16px;border-radius:16px;font-size:13px;cursor:pointer}
+.login-bar button.logout{color:#999;border-color:#ddd}
+.search-box{display:flex;gap:8px;padding:12px;background:#fff}
+.search-box input{flex:1;padding:10px 14px;border:1px solid #ddd;border-radius:20px;font-size:15px;outline:none}
+.search-box input:focus{border-color:#fb7299}
+.search-box button{background:#fb7299;border:none;color:#fff;padding:10px 20px;border-radius:20px;font-size:15px;cursor:pointer}
+#upInfo{background:#fff;padding:16px;margin:12px;border-radius:12px;display:none;align-items:center;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+#upInfo img{width:48px;height:48px;border-radius:50%;object-fit:cover}
+#upInfo .name{font-size:16px;font-weight:600}
+#upInfo .meta{font-size:12px;color:#999}
+#upInfo .sign{font-size:12px;color:#666;margin-top:4px}
+
+.follow-section{display:none;padding:12px}
+.follow-section h3{font-size:14px;color:#666;margin-bottom:8px;padding:0 4px}
+.follow-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.follow-card{background:#fff;border-radius:10px;padding:10px;text-align:center;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:transform .1s}
+.follow-card:active{transform:scale(.96)}
+.follow-card img{width:40px;height:40px;border-radius:50%;object-fit:cover;margin-bottom:6px}
+.follow-card .uname{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.content{padding:0 12px}
+.card{background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.card .top{display:flex;cursor:pointer;transition:background .15s}
+.card .top:active{background:#fafafa}
+.card .thumb{width:120px;min-width:120px;height:75px;background:#eee;position:relative;overflow:hidden}
+.card .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.card .dur{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.75);color:#fff;font-size:10px;padding:2px 5px;border-radius:3px}
+.card .info{flex:1;padding:10px 12px;min-width:0}
+.card .title{font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
+.card .meta{font-size:11px;color:#999;margin-bottom:4px;display:flex;gap:10px;flex-wrap:wrap}
+.card .meta span{white-space:nowrap}
+.card .desc{font-size:12px;color:#666;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.result-stats{text-align:center;font-size:12px;color:#999;padding:4px 0 8px}
+.loading{padding:60px;text-align:center;color:#999}
+.loading .spinner{display:inline-block;width:32px;height:32px;border:3px solid #eee;border-top-color:#fb7299;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.error{padding:40px 20px;text-align:center;color:#e74c3c;font-size:14px}
+.error small{color:#999;font-size:12px;display:block;margin-top:8px}
+.bili-link{display:inline-block;background:#fb7299;color:#fff;padding:10px 24px;border-radius:20px;text-decoration:none;font-size:14px;margin-top:12px}
+
+.modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center}
+.modal.show{display:flex}
+.modal-box{background:#fff;border-radius:16px;padding:24px;max-width:300px;width:90%;text-align:center}
+.modal-box h3{font-size:18px;margin-bottom:8px}
+.modal-box .qr-wrap{width:200px;height:200px;margin:12px auto;display:flex;align-items:center;justify-content:center}
+.modal-box .qr-wrap canvas,.modal-box .qr-wrap img{max-width:200px;max-height:200px}
+.modal-box .tip{font-size:13px;color:#999}
+.modal-box .close-btn{margin-top:16px;padding:8px 24px;border:1px solid #ddd;border-radius:20px;background:#fff;color:#666;font-size:14px;cursor:pointer}
+
+.detail-page{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#f5f5f5;z-index:150;overflow-y:auto}
+.detail-page.show{display:block}
+.detail-page .dp-header{background:linear-gradient(135deg,#fb7299,#fc8f6e);color:#fff;padding:16px;display:flex;align-items:center;gap:12px}
+.detail-page .dp-header .back{font-size:24px;cursor:pointer;width:32px;text-align:center}
+.detail-page .dp-header .up-info{flex:1}
+.detail-page .dp-header .up-name{font-size:17px;font-weight:600}
+.detail-page .dp-header .up-meta{font-size:12px;opacity:.85}
+.detail-page .dp-videos{padding:12px;padding-bottom:80px}
+.back-btn{display:inline-flex;align-items:center;gap:4px;color:#fb7299;font-size:13px;cursor:pointer;padding:8px 0;margin-bottom:4px}
+
+.video-page{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#f5f5f5;z-index:160;overflow-y:auto}
+.video-page.show{display:block}
+.video-page .vp-header{background:linear-gradient(135deg,#fb7299,#fc8f6e);color:#fff;padding:14px 16px;display:flex;align-items:flex-start;gap:10px;position:sticky;top:0;z-index:10}
+.video-page .vp-header .back{font-size:22px;cursor:pointer;min-width:28px;text-align:center;line-height:1.3}
+.video-page .vp-header .vp-title{font-size:15px;font-weight:600;line-height:1.4;flex:1}
+.video-page .vp-body{padding:16px}
+.video-page .vp-section{background:#fff;border-radius:12px;padding:16px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.video-page .vp-section .sec-title{font-size:15px;font-weight:600;color:#fb7299;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.video-page .vp-section .ai-badge{font-size:11px;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px;font-weight:400}
+.video-page .vp-section .sec-loading{font-size:13px;color:#999;text-align:center;padding:20px}
+.video-page .vp-section .sec-error{font-size:13px;color:#e74c3c;text-align:center;padding:16px}
+.video-page .topic{font-size:17px;font-weight:600;color:#333;margin-bottom:12px;display:block}
+.video-page .sections{margin-bottom:12px}
+.video-page .sections>.label{font-weight:500;color:#fb7299;margin-bottom:6px;display:block;font-size:13px}
+.video-page .sec-item{background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:6px}
+.video-page .sec-item .part{color:#1976d2;font-weight:500;margin-bottom:4px;font-size:13px}
+.video-page .sec-item .content{color:#666;font-size:13px;line-height:1.5}
+.video-page .keypoints{margin-bottom:12px}
+.video-page .keypoints>.label{font-weight:500;color:#e65100;margin-bottom:4px;display:block;font-size:13px}
+.video-page .kp{font-size:13px;padding:3px 0;color:#555}
+.video-page .tags-row{display:flex;gap:8px;flex-wrap:wrap}
+.video-page .tag{font-size:12px;padding:4px 10px;border-radius:12px}
+.video-page .tag.cat{background:#e3f2fd;color:#1976d2}
+.video-page .tag.rec{background:#fff3e0;color:#e65100;font-weight:500}
+.video-page .tag.reason{color:#999}
+.video-page .subtitle-text{background:#fafafa;border-radius:8px;padding:12px;font-size:13px;color:#555;line-height:1.8;white-space:pre-wrap;overflow-y:visible}
+</style>
+</head>
+<body>
+<div class="header"><h1>📺 B站UP主视频速览</h1><div class="sub">登录后查看关注UP主，AI概括+字幕一键获取</div></div>
+
+<div class="login-bar" id="loginBar">
+  <span id="loginStatus" style="font-size:13px;color:#999">未登录</span>
+  <button onclick="showLogin()">🔑 扫码登录</button>
+</div>
+
+<div class="search-box">
+  <input type="text" id="searchInput" placeholder="输入UP主名字..." autocomplete="off" onkeydown="if(event.key==='Enter')search()">
+  <button onclick="search()">搜索</button>
+</div>
+
+<div class="follow-section" id="followSection">
+  <h3>⭐ 我关注的UP主</h3>
+  <div class="follow-grid" id="followList"></div>
+</div>
+
+<div id="upInfo"></div>
+<div class="result-stats" id="stats"></div>
+<div class="content" id="list">
+  <div style="padding:60px 20px;text-align:center;color:#999;font-size:14px">
+    👆 登录后可查看关注UP主<br><small>或直接搜索任意UP主名字</small>
+  </div>
+</div>
+
+<div class="modal" id="loginModal">
+  <div class="modal-box">
+    <h3>🔑 扫码登录B站</h3>
+    <p class="tip">请用B站APP扫码</p>
+    <div class="qr-wrap" id="qrWrap"></div>
+    <p class="tip" id="qrStatus">等待扫码...</p>
+    <button class="close-btn" onclick="closeLogin()">取消</button>
+  </div>
+</div>
+
+<div class="detail-page" id="detailPage">
+  <div class="dp-header">
+    <div class="back" onclick="goHome()">←</div>
+    <div>
+      <div class="up-name" id="dpName"></div>
+      <div class="up-meta" id="dpMeta"></div>
+    </div>
+  </div>
+  <div class="dp-videos" id="dpVideos"></div>
+</div>
+
+<div class="video-page" id="videoPage">
+  <div class="vp-header">
+    <div class="back" onclick="closeVideoPage()">←</div>
+    <div class="vp-title" id="vpTitle"></div>
+  </div>
+  <div class="vp-body">
+    <div class="vp-section" id="vpSummarySection">
+      <div class="sec-title">🤖 AI 概括分析</div>
+      <div class="sec-loading" id="vpSummaryLoading">DeepSeek AI 分析中...</div>
+      <div id="vpSummaryContent"></div>
+    </div>
+    <div class="vp-section" id="vpSubtitleSection">
+      <div class="sec-title" id="vpSubtitleTitle">📜 视频文字版</div>
+      <div class="sec-loading" id="vpSubtitleLoading">获取文字版中...</div>
+      <div id="vpSubtitleContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var POLL_INTERVAL=null,LOGGED_IN=false,LOGIN_UID=null;
+function fmt(n){if(n>=1e4)return(n/1e4).toFixed(1)+'万';return n.toLocaleString()}
+function ts(d){return new Date(d*1000).toLocaleDateString('zh-CN')}
+
+async function checkLogin(){try{var r=await fetch('/api/login/info');var d=await r.json();if(d.logged_in){LOGGED_IN=true;LOGIN_UID=d.user.uid;document.getElementById('loginBar').innerHTML='<img src="'+d.user.face+'" class="avatar"> <span class="uname">'+d.user.uname+'</span> <button class="logout" onclick="logout()">退出</button>';loadFollowings()}}catch(e){}}
+
+async function showLogin(){
+  document.getElementById('loginModal').classList.add('show');
+  document.getElementById('qrStatus').textContent='正在生成...';
+  // 清空旧二维码
+  document.getElementById('qrWrap').innerHTML='';
+  try{
+    var r=await fetch('/api/login/generate');
+    var d=await r.json();
+    if(d.error){alert(d.error);closeLogin();return}
+    // 使用 qrcodejs 生成二维码
+    new QRCode(document.getElementById('qrWrap'),{
+      text: d.qr_url,
+      width: 200,
+      height: 200,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+    document.getElementById('qrStatus').textContent='请用B站APP扫码';
+    POLL_INTERVAL=setInterval(function(){pollLogin(d.qrcode_key)},2000);
+  }catch(e){document.getElementById('qrStatus').textContent='生成失败:'+e.message}
+}
+
+async function pollLogin(key){
+  try{var r=await fetch('/api/login/poll?key='+key);var d=await r.json();
+  if(d.code===0&&d.user){clearInterval(POLL_INTERVAL);closeLogin();checkLogin()}
+  else if(d.code===86038){document.getElementById('qrStatus').textContent='二维码已过期';clearInterval(POLL_INTERVAL)}
+  else if(d.code===86090){document.getElementById('qrStatus').textContent='已扫码，请确认'}
+  else if(d.code===86101){document.getElementById('qrStatus').textContent='等待扫码...'}
+  }catch(e){}
+}
+
+function closeLogin(){document.getElementById('loginModal').classList.remove('show');if(POLL_INTERVAL){clearInterval(POLL_INTERVAL);POLL_INTERVAL=null}}
+async function logout(){await fetch('/api/login/logout');LOGGED_IN=false;LOGIN_UID=null;location.reload()}
+
+async function loadFollowings(){try{var r=await fetch('/api/followings?page=1');var d=await r.json();if(d.error)return;document.getElementById('followSection').style.display='block';var h='';d.users.forEach(function(u){h+='<div class="follow-card" onclick="openUP('+u.mid+',\''+u.uname+'\',\''+u.face+'\',\''+(u.sign||'').replace(/'/g,'')+'\')">'+'<img src="'+u.face+'">'+'<div class="uname">'+u.uname+'</div></div>'});document.getElementById('followList').innerHTML=h}catch(e){}}
+
+function openUP(mid,uname,face,sign){
+  history.pushState({page:'up',mid:mid,uname:uname,face:face,sign:sign},'',location.pathname+'?up='+mid);
+  document.getElementById('videoPage').classList.remove('show');
+  document.getElementById('detailPage').classList.add('show');
+  document.getElementById('dpName').textContent=uname;
+  document.getElementById('dpMeta').textContent=(sign||'').slice(0,40);
+  document.getElementById('dpVideos').innerHTML='<div class="loading"><div class="spinner"></div><p>加载视频...</p></div>';
+  loadVideosForPage(mid,uname,face,sign);
+}
+
+function goHome(){
+  history.pushState({page:'home'},'',location.pathname);
+  document.getElementById('detailPage').classList.remove('show');
+  document.getElementById('videoPage').classList.remove('show');
+}
+
+async function loadVideosForPage(mid,uname,face,sign){
+  try{var r=await fetch('/api/all_videos?mid='+mid+'&pages=2');var d=await r.json();
+  var h='<div class="back-btn" onclick="goHome()">← 返回</div>';
+  var txt='共 '+d.total+' 个视频';if(d.count>d.total)txt+=' (总 '+d.count+' 个)';if(d.error)txt+=' | ⚠️ '+d.error.slice(0,20);
+  h+='<div class="result-stats">'+txt+'</div>';
+  d.videos.forEach(function(v){h+=cardHTML(v,mid,uname||'',face||'',sign||'')});
+  document.getElementById('dpVideos').innerHTML=h||'<div class="error">暂无视频</div>'}catch(e){document.getElementById('dpVideos').innerHTML='<div class="error">加载失败</div>'}}
+
+async function search(){var name=document.getElementById('searchInput').value.trim();if(!name)return;document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p>搜索中...</p></div>';try{var r=await fetch('/api/search_up?name='+encodeURIComponent(name));var d=await r.json();if(d.error||!d.results||!d.results.length){document.getElementById('list').innerHTML='<div class="error">未找到</div>';return}var up=d.results[0];openUP(up.mid,up.uname,up.face,up.sign)}catch(e){document.getElementById('list').innerHTML='<div class="error">搜索失败</div>'}}
+
+function cardHTML(v,mid,uname,face,sign){
+  return '<div class="card"><div class="top" onclick="openVideo(\''+v.bvid+'\',\''+v.title.replace(/'/g,'')+'\','+mid+',\''+(uname||'').replace(/'/g,'')+'\',\''+(face||'').replace(/'/g,'')+'\',\''+(sign||'').replace(/'/g,'')+'\')"><div class="thumb"><img src="'+v.pic+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="dur">'+v.length+'</span></div><div class="info"><div class="title">'+v.title+'</div><div class="meta"><span>📅 '+ts(v.created)+'</span><span>👁 '+fmt(v.play)+'</span><span>💬 '+fmt(v.comment)+'</span></div><div class="desc">'+(v.description||'')+'</div></div></div></div>';
+}
+
+function openVideo(bvid,title,mid,uname,face,sign){
+  history.pushState({page:'video',bvid:bvid,title:title,mid:mid,uname:uname,face:face,sign:sign},'',location.pathname+'?bvid='+bvid+'&title='+encodeURIComponent(title)+'&mid='+mid+'&uname='+encodeURIComponent(uname)+'&face='+encodeURIComponent(face||'')+'&sign='+encodeURIComponent(sign||''));
+  showVideoPage(bvid,title,mid,uname,face,sign);
+}
+
+function showVideoPage(bvid,title,mid,uname,face,sign){
+  window._upCtx={mid:mid,uname:uname,face:face,sign:sign};
+  document.getElementById('detailPage').classList.remove('show');
+  document.getElementById('videoPage').classList.add('show');
+  document.getElementById('vpTitle').textContent=title;
+  document.getElementById('vpSummaryLoading').style.display='block';
+  document.getElementById('vpSummaryContent').innerHTML='';
+  document.getElementById('vpSubtitleLoading').style.display='block';
+  document.getElementById('vpSubtitleContent').innerHTML='';
+  document.getElementById('vpSubtitleTitle').innerHTML='📜 视频文字版';
+  loadVideoSummary(bvid);
+  loadVideoSubtitle(bvid);
+}
+
+function closeVideoPage(){
+  var ctx=window._upCtx;
+  if(ctx&&ctx.mid){
+    history.pushState({page:'up',mid:ctx.mid,uname:ctx.uname,face:ctx.face,sign:ctx.sign},'',location.pathname+'?up='+ctx.mid);
+    document.getElementById('videoPage').classList.remove('show');
+    document.getElementById('detailPage').classList.add('show');
+  }else{
+    history.pushState({page:'home'},'',location.pathname);
+    document.getElementById('videoPage').classList.remove('show');
+  }
+}
+
+async function loadVideoSummary(bvid){
+  try{var r=await fetch('/api/summarize?bvid='+bvid);var d=await r.json();
+  document.getElementById('vpSummaryLoading').style.display='none';
+  var h='';if(d.error){h='<div class="sec-error">'+d.error+'</div>'}else{
+  if(d.topic)h+='<span class="topic">📌 '+d.topic+'</span>';
+  if(d.sections&&d.sections.length){h+='<div class="sections"><span class="label">📂 内容结构</span>';d.sections.forEach(function(s){h+='<div class="sec-item"><div class="part">'+s.part+'</div><div class="content">'+s.content+'</div></div>'});h+='</div>'}
+  if(d.key_points&&d.key_points.length){h+='<div class="keypoints"><span class="label">💡 核心观点</span>';d.key_points.forEach(function(k){h+='<div class="kp">• '+k+'</div>'});h+='</div>'}
+  if(d.category||d.recommendation){h+='<div class="tags-row">';if(d.category)h+='<span class="tag cat">'+d.category+'</span>';if(d.recommendation)h+='<span class="tag rec">'+d.recommendation+'</span>';if(d.recommendation_reason)h+='<span class="tag reason">'+d.recommendation_reason+'</span>';h+='</div>'}}
+  document.getElementById('vpSummaryContent').innerHTML=h||'<div class="sec-error">暂无概括数据</div>'}catch(e){document.getElementById('vpSummaryLoading').style.display='none';document.getElementById('vpSummaryContent').innerHTML='<div class="sec-error">AI概括失败: '+e.message+'</div>'}}
+
+async function loadVideoSubtitle(bvid){
+  try{var r=await fetch('/api/subtitle?bvid='+bvid);var d=await r.json();
+  document.getElementById('vpSubtitleLoading').style.display='none';
+  if(d.ai_generated){
+    document.getElementById('vpSubtitleTitle').innerHTML='📜 AI生成文字版 <span class="ai-badge">AI推测</span>';
+  }else if(d.subtitles&&d.subtitles.length){
+    document.getElementById('vpSubtitleTitle').innerHTML='📜 CC字幕 ('+d.subtitles[0].lan_doc+')';
+  }
+  if(d.text&&d.text.length>20){
+    document.getElementById('vpSubtitleContent').innerHTML='<div class="subtitle-text">'+d.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>';
+  }else{
+    var msg=d.text||'该视频暂无可用的文字版内容';
+    document.getElementById('vpSubtitleContent').innerHTML='<div class="sec-error" style="padding:20px;line-height:1.6">'+msg+'</div>';
+  }}catch(e){document.getElementById('vpSubtitleLoading').style.display='none';document.getElementById('vpSubtitleContent').innerHTML='<div class="sec-error">网络请求失败: '+e.message+'</div>'}}
+
+window.onpopstate=function(e){
+  if(e.state&&e.state.page==='video'){
+    showVideoPage(e.state.bvid,e.state.title,e.state.mid,e.state.uname,e.state.face,e.state.sign);
+  }else if(e.state&&e.state.page==='up'){
+    openUP(e.state.mid,e.state.uname,e.state.face,e.state.sign);
+  }else{goHome()}
+};
+
+function checkHomeState(){
+  var params=new URLSearchParams(location.search);
+  var bvid=params.get('bvid');
+  if(bvid){
+    var title=params.get('title')||'视频详情',mid=params.get('mid')||'',uname=params.get('uname')||'';
+    var face=params.get('face')||'',sign=params.get('sign')||'';
+    history.replaceState({page:'video',bvid:bvid,title:title,mid:mid,uname:uname,face:face,sign:sign},'',location.pathname+'?bvid='+bvid+'&title='+encodeURIComponent(title)+'&mid='+mid+'&uname='+encodeURIComponent(uname)+'&face='+encodeURIComponent(face)+'&sign='+encodeURIComponent(sign));
+    showVideoPage(bvid,title,mid,uname,face,sign);return;
+  }
+  var upMid=params.get('up');
+  if(upMid){
+    history.replaceState({page:'home'},'',location.pathname);
+    searchByMid(upMid);
+  }
+}
+
+async function searchByMid(mid){
+  document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p>加载UP主信息...</p></div>';
+  try{
+    var info=await fetch('/api/search_up?name='+mid).then(function(r){return r.json()});
+    if(info.results&&info.results.length){var up=info.results[0];openUP(up.mid,up.uname,up.face,up.sign)}
+    else{openUP(mid,'UP主 (MID:'+mid+')','','')}
+  }catch(e){openUP(mid,'UP主 (MID:'+mid+')','','')}
+}
+
+checkLogin();
+checkHomeState();
+</script>
+</body>
+</html>
