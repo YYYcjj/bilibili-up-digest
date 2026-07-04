@@ -169,10 +169,20 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 
 <script>
 var POLL_INTERVAL=null,LOGGED_IN=false,LOGIN_UID=null;
+// EdgeOne Preview Token 自动注入
+var _eoParams='';try{
+  var sp=new URLSearchParams(location.search);
+  if(sp.get('eo_token'))_eoParams='eo_token='+sp.get('eo_token')+'&eo_time='+sp.get('eo_time');
+}catch(e){}
+function apiFetch(path,opt){
+  if(!_eoParams)return fetch(path,opt);
+  var sep=path.indexOf('?')>=0?'&':'?';
+  return fetch(path+sep+_eoParams,opt);
+}
 function fmt(n){if(n>=1e4)return(n/1e4).toFixed(1)+'万';return n.toLocaleString()}
 function ts(d){return new Date(d*1000).toLocaleDateString('zh-CN')}
 
-async function checkLogin(){try{var r=await fetch('/api/login/info');var d=await r.json();if(d.logged_in){LOGGED_IN=true;LOGIN_UID=d.user.uid;document.getElementById('loginBar').innerHTML='<img src="'+d.user.face+'" class="avatar"> <span class="uname">'+d.user.uname+'</span> <button class="logout" onclick="logout()">退出</button>';loadFollowings()}}catch(e){}}
+async function checkLogin(){try{var r=await apiFetch('/api/login/info');var d=await r.json();if(d.logged_in){LOGGED_IN=true;LOGIN_UID=d.user.uid;document.getElementById('loginBar').innerHTML='<img src="'+d.user.face+'" class="avatar"> <span class="uname">'+d.user.uname+'</span> <button class="logout" onclick="logout()">退出</button>';loadFollowings()}}catch(e){}}
 
 async function showLogin(){
   document.getElementById('loginModal').classList.add('show');
@@ -180,7 +190,7 @@ async function showLogin(){
   // 清空旧二维码
   document.getElementById('qrWrap').innerHTML='';
   try{
-    var r=await fetch('/api/login/generate');
+    var r=await apiFetch('/api/login/generate');
     var d=await r.json();
     if(d.error){alert(d.error);closeLogin();return}
     // 使用 qrcodejs 生成二维码
@@ -198,7 +208,7 @@ async function showLogin(){
 }
 
 async function pollLogin(key){
-  try{var r=await fetch('/api/login/poll?key='+key);var d=await r.json();
+  try{var r=await apiFetch('/api/login/poll?key='+key);var d=await r.json();
   if(d.code===0&&d.user){clearInterval(POLL_INTERVAL);closeLogin();checkLogin()}
   else if(d.code===86038){document.getElementById('qrStatus').textContent='二维码已过期';clearInterval(POLL_INTERVAL)}
   else if(d.code===86090){document.getElementById('qrStatus').textContent='已扫码，请确认'}
@@ -207,9 +217,9 @@ async function pollLogin(key){
 }
 
 function closeLogin(){document.getElementById('loginModal').classList.remove('show');if(POLL_INTERVAL){clearInterval(POLL_INTERVAL);POLL_INTERVAL=null}}
-async function logout(){await fetch('/api/login/logout');LOGGED_IN=false;LOGIN_UID=null;location.reload()}
+async function logout(){await apiFetch('/api/login/logout');LOGGED_IN=false;LOGIN_UID=null;location.reload()}
 
-async function loadFollowings(){try{var r=await fetch('/api/followings?page=1');var d=await r.json();if(d.error)return;document.getElementById('followSection').style.display='block';var h='';d.users.forEach(function(u){h+='<div class="follow-card" onclick="openUP('+u.mid+',\''+u.uname+'\',\''+u.face+'\',\''+(u.sign||'').replace(/'/g,'')+'\')">'+'<img src="'+u.face+'">'+'<div class="uname">'+u.uname+'</div></div>'});document.getElementById('followList').innerHTML=h}catch(e){}}
+async function loadFollowings(){try{var r=await apiFetch('/api/followings?page=1');var d=await r.json();if(d.error)return;document.getElementById('followSection').style.display='block';var h='';d.users.forEach(function(u){h+='<div class="follow-card" onclick="openUP('+u.mid+',\''+u.uname+'\',\''+u.face+'\',\''+(u.sign||'').replace(/'/g,'')+'\')">'+'<img src="'+u.face+'">'+'<div class="uname">'+u.uname+'</div></div>'});document.getElementById('followList').innerHTML=h}catch(e){}}
 
 function openUP(mid,uname,face,sign){
   history.pushState({page:'up',mid:mid,uname:uname,face:face,sign:sign},'',location.pathname+'?up='+mid);
@@ -228,14 +238,14 @@ function goHome(){
 }
 
 async function loadVideosForPage(mid,uname,face,sign){
-  try{var r=await fetch('/api/all_videos?mid='+mid+'&pages=2');var d=await r.json();
+  try{var r=await apiFetch('/api/all_videos?mid='+mid+'&pages=2');var d=await r.json();
   var h='<div class="back-btn" onclick="goHome()">← 返回</div>';
   var txt='共 '+d.total+' 个视频';if(d.count>d.total)txt+=' (总 '+d.count+' 个)';if(d.error)txt+=' | ⚠️ '+d.error.slice(0,20);
   h+='<div class="result-stats">'+txt+'</div>';
   d.videos.forEach(function(v){h+=cardHTML(v,mid,uname||'',face||'',sign||'')});
   document.getElementById('dpVideos').innerHTML=h||'<div class="error">暂无视频</div>'}catch(e){document.getElementById('dpVideos').innerHTML='<div class="error">加载失败</div>'}}
 
-async function search(){var name=document.getElementById('searchInput').value.trim();if(!name)return;document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p>搜索中...</p></div>';try{var r=await fetch('/api/search_up?name='+encodeURIComponent(name));var d=await r.json();if(d.error||!d.results||!d.results.length){document.getElementById('list').innerHTML='<div class="error">未找到</div>';return}var up=d.results[0];openUP(up.mid,up.uname,up.face,up.sign)}catch(e){document.getElementById('list').innerHTML='<div class="error">搜索失败</div>'}}
+async function search(){var name=document.getElementById('searchInput').value.trim();if(!name)return;document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p>搜索中...</p></div>';try{var r=await apiFetch('/api/search_up?name='+encodeURIComponent(name));var d=await r.json();if(d.error||!d.results||!d.results.length){document.getElementById('list').innerHTML='<div class="error">未找到</div>';return}var up=d.results[0];openUP(up.mid,up.uname,up.face,up.sign)}catch(e){document.getElementById('list').innerHTML='<div class="error">搜索失败</div>'}}
 
 function cardHTML(v,mid,uname,face,sign){
   return '<div class="card"><div class="top" onclick="openVideo(\''+v.bvid+'\',\''+v.title.replace(/'/g,'')+'\','+mid+',\''+(uname||'').replace(/'/g,'')+'\',\''+(face||'').replace(/'/g,'')+'\',\''+(sign||'').replace(/'/g,'')+'\')"><div class="thumb"><img src="'+v.pic+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="dur">'+v.length+'</span></div><div class="info"><div class="title">'+v.title+'</div><div class="meta"><span>📅 '+ts(v.created)+'</span><span>👁 '+fmt(v.play)+'</span><span>💬 '+fmt(v.comment)+'</span></div><div class="desc">'+(v.description||'')+'</div></div></div></div>';
@@ -273,7 +283,7 @@ function closeVideoPage(){
 }
 
 async function loadVideoSummary(bvid){
-  try{var r=await fetch('/api/summarize?bvid='+bvid);var d=await r.json();
+  try{var r=await apiFetch('/api/summarize?bvid='+bvid);var d=await r.json();
   document.getElementById('vpSummaryLoading').style.display='none';
   var h='';if(d.error){h='<div class="sec-error">'+d.error+'</div>'}else{
   if(d.topic)h+='<span class="topic">📌 '+d.topic+'</span>';
@@ -283,7 +293,7 @@ async function loadVideoSummary(bvid){
   document.getElementById('vpSummaryContent').innerHTML=h||'<div class="sec-error">暂无概括数据</div>'}catch(e){document.getElementById('vpSummaryLoading').style.display='none';document.getElementById('vpSummaryContent').innerHTML='<div class="sec-error">AI概括失败: '+e.message+'</div>'}}
 
 async function loadVideoSubtitle(bvid){
-  try{var r=await fetch('/api/subtitle?bvid='+bvid);var d=await r.json();
+  try{var r=await apiFetch('/api/subtitle?bvid='+bvid);var d=await r.json();
   document.getElementById('vpSubtitleLoading').style.display='none';
   if(d.ai_generated){
     document.getElementById('vpSubtitleTitle').innerHTML='📜 AI生成文字版 <span class="ai-badge">AI推测</span>';
@@ -324,7 +334,7 @@ function checkHomeState(){
 async function searchByMid(mid){
   document.getElementById('list').innerHTML='<div class="loading"><div class="spinner"></div><p>加载UP主信息...</p></div>';
   try{
-    var info=await fetch('/api/search_up?name='+mid).then(function(r){return r.json()});
+    var info=await apiFetch('/api/search_up?name='+mid).then(function(r){return r.json()});
     if(info.results&&info.results.length){var up=info.results[0];openUP(up.mid,up.uname,up.face,up.sign)}
     else{openUP(mid,'UP主 (MID:'+mid+')','','')}
   }catch(e){openUP(mid,'UP主 (MID:'+mid+')','','')}
