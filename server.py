@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""B站UP主视频速览 Web 服务 - 支持登录+关注UP主+AI概括+字幕"""
+"""B站UP主视频速览 Web 服务"""
 import json,re,hashlib,time,io,base64,os
 from http.server import HTTPServer,BaseHTTPRequestHandler
 from urllib.parse import urlparse,parse_qs,urlencode
@@ -28,7 +28,7 @@ def _save_login_state():
    for k in _login_session.cookies:
     if k.name in('SESSDATA','bili_jct','DedeUserID','DedeUserID__ckMd5'):c[k.name]=k.value
   with open(_LOGIN_STATE_FILE,'w')as f:json.dump({'info':_login_info,'cookies':c},f,ensure_ascii=False)
- except Exception as e:print(f'[WARN]{e}')
+ except:pass
 def _load_login_state():
  global _login_session,_login_info
  if not os.path.exists(_LOGIN_STATE_FILE):return False
@@ -91,13 +91,13 @@ def _bili_get(path,params=None):
 def summarize_video(vid):
  if not LLM_API_KEY:return{'topic':vid.get('title',''),'summary':'未配置AI Key','recommendation':'可选'}
  try:
-  p="分析B站视频："+vid.get('title','')+" 简介："+((vid.get('description','')or vid.get('desc',''))[:200])+" 输出JSON主题、概括、分类、推荐度"
+  p="分析B站视频："+vid.get('title','')+" 简介："+((vid.get('description','')or vid.get('desc',''))[:200])+" 输出JSON"
   r=requests.post(LLM_API_BASE+"/chat/completions",headers={"Authorization":"Bearer "+LLM_API_KEY},json={"model":LLM_MODEL,"messages":[{"role":"user","content":p}],"temperature":0.3,"max_tokens":200},timeout=20)
   d=r.json();t=d['choices'][0]['message']['content'].strip()
   if'```json'in t:t=t.split('```json')[1].split('```')[0]
   elif'```'in t:t=t.split('```')[1].split('```')[0]
   return json.loads(t)
- except Exception as e:return{'topic':vid.get('title',''),'summary':'AI失败','recommendation':'可选'}
+ except:return{'topic':vid.get('title',''),'summary':'AI失败','recommendation':'可选'}
 def get_subtitle(bvid):
  try:
   info=_bili_get('/x/web-interface/view',{'bvid':bvid});cid=info['data']['cid']
@@ -105,10 +105,10 @@ def get_subtitle(bvid):
   subs=player.get('data',{}).get('subtitle',{}).get('subtitles',[])
   if not subs:return{'subtitles':[],'text':'该视频没有字幕'}
   sr=requests.get(_fix_url(subs[0]['subtitle_url']),timeout=15);sd=sr.json()
-  body=sd.get('body',[]);text='\n'.join(str(i+1)+'. '+it['content']for i,it in enumerate(body[:5000]))
-  if len(body)>5000:text+='\n...（共'+str(len(body))+'句）'
+  body=sd.get('body',[]);text='\n'.join(str(i+1)+'. '+it['content']for i,it in enumerate(body[:200]))
+  if len(body)>200:text+='\n...（共'+str(len(body))+'句）'
   return{'subtitles':[{'lan':subs[0].get('lan',''),'lan_doc':subs[0].get('lan_doc','')}],'text':text}
- except Exception as e:return{'subtitles':[],'text':'获取失败:'+str(e)}
+ except:return{'subtitles':[],'text':'获取失败'}
 def _get_bilibili_ai(bvid,cid,up_mid=0):
  try:
   params=_sign_params({'bvid':bvid,'cid':cid,'up_mid':up_mid});d=_bili_get('/x/web-interface/view/conclusion/get',params)
@@ -157,7 +157,8 @@ def handle_api(path,query):
   name=query.get('name',[''])[0]
   if not name:return 400,{'error':'缺少name'}
   try:
-   d=_bili_get('/x/web-interface/search/type',{'search_type':'bili_user','keyword':name})
+   params=_sign_params({'search_type':'bili_user','keyword':name})
+   d=_bili_get('/x/web-interface/search/type',params)
    results=[]
    for u in(d.get('data',{}).get('result',[])or[]):results.append({'mid':u['mid'],'uname':u['uname'],'sign':u.get('usign',''),'fans':u.get('fans',0),'videos':u.get('videos',0),'face':_fix_url(u.get('upic',''))})
    return 200,{'results':results}
@@ -189,7 +190,7 @@ def handle_api(path,query):
    bai=_get_bilibili_ai(bvid,cid,up_mid)
    if bai and bai['has_subtitle']:return 200,{'source':'bilibili_ai','text':bai['subtitle_text'],'insufficient':False,'subtitles':[{'lan':'zh','lan_doc':'AI字幕'}]}
    result=get_subtitle(bvid);return 200,result
-  except Exception as e:return 200,{'text':'','insufficient':True,'subtitles':[],'error':str(e)}
+  except:return 200,{'text':'','insufficient':True,'subtitles':[]}
  return 404,{'error':'未知API'}
 import os as _os
 _HTML_PATH=_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),'templates','index.html')
@@ -205,15 +206,14 @@ class Handler(BaseHTTPRequestHandler):
     status,body=handle_api(path,query)
     self.send_response(status);self.send_header('Content-Type','application/json;charset=utf-8');self.send_header('Access-Control-Allow-Origin','*');self.end_headers()
     self.wfile.write(json.dumps(body,ensure_ascii=False).encode())
-   except Exception as e:
+   except:
     self.send_response(500);self.send_header('Content-Type','application/json');self.send_header('Access-Control-Allow-Origin','*');self.end_headers()
-    self.wfile.write(json.dumps({'error':str(e)},ensure_ascii=False).encode())
+    self.wfile.write(b'{"error":"server error"}')
    return
   self.send_response(200);self.send_header('Content-Type','text/html;charset=utf-8');self.end_headers()
   self.wfile.write(_load_html().encode())
  def log_message(self,*a):pass
 if __name__=='__main__':
- print('[INFO] 启动B站UP主视频速览 端口:'+str(PORT))
- print('[INFO] LLM:'+('已配置'if LLM_API_KEY else'未配置'))
+ print('[INFO] B站UP主视频速览 端口:'+str(PORT))
  if _load_login_state():print('[INFO] 登录已恢复: '+_login_info['uname'])
  HTTPServer(('0.0.0.0',PORT),Handler).serve_forever()
