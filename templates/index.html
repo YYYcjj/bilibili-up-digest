@@ -53,7 +53,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .up-info .sign{font-size:11px;color:#999;margin-top:2px}
 .modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center}
 .modal.show{display:flex}
-.modal-box{background:#fff;border-radius:16px;padding:24px;max-width:300px;width:90%;text-align:center}
+.modal-box{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:300px;text-align:center}
 .modal-box h3{font-size:18px;margin-bottom:8px}
 .modal-box .qr{width:200px;height:200px;margin:12px auto;display:block}
 .modal-box .tip{font-size:13px;color:#999}
@@ -187,6 +187,7 @@ document.querySelector('.content').insertAdjacentElement('beforebegin',si);
 async function loadUPVideos(mid,page){
 try{
 var d=await fetch('/api/all_videos?mid='+mid+'&page='+page+'&ps='+PS).then(function(r){return r.json()});
+if(!d.videos){throw new Error(d.error||'返回数据为空')}
 _page=page;_total=d.count||0;_all=d.videos;
 var h='<div class="result-stats">共 '+_total+'个 / 第'+page+'页</div>'+
 '<div class="filter-bar"><span class="fl">排序：</span><select onchange="sortV(this.value)"><option value="newest">最新发布</option><option value="hot">最多播放</option><option value="comment">最多评论</option></select></div>'+
