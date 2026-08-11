@@ -27,8 +27,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .follow-card .uname{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .follow-card .sign{font-size:10px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .content{padding:0 12px;padding-bottom:80px}
-.card{background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:background .15s}
-.card:active{background:#fafafa}
+.card{background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer}
 .card-inner{display:flex}
 .card .thumb{width:130px;min-width:130px;height:82px;background:#eee;position:relative;overflow:hidden}
 .card .thumb img{width:100%;height:100%;object-fit:cover;display:block}
@@ -37,19 +36,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .card .title{font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
 .card .meta{font-size:11px;color:#999;display:flex;gap:10px;flex-wrap:wrap}
 .card .meta span{white-space:nowrap}
-.card .desc{font-size:12px;color:#666;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:2px}
-.score-row{display:flex;gap:3px;margin-top:3px;flex-wrap:wrap}.score-row .sb{font-size:10px;padding:1px 5px;border-radius:6px;background:#f0f0f0;color:#888;white-space:nowrap}.score-row .sb.hi{background:#e8f5e9;color:#388e3c}
+.score-row{display:flex;gap:3px;margin-top:3px;flex-wrap:wrap}
+.score-row .sb{font-size:10px;padding:1px 5px;border-radius:6px;background:#f0f0f0;color:#888;white-space:nowrap}
+.score-row .sb.hi{background:#e8f5e9;color:#388e3c}
 .result-stats{text-align:center;font-size:12px;color:#999;padding:8px 0 4px}
 .loading{padding:60px 20px;text-align:center;color:#999}
 .loading .spinner{display:inline-block;width:32px;height:32px;border:3px solid #eee;border-top-color:#fb7299;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:10px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .error{padding:40px 20px;text-align:center;color:#e74c3c;font-size:14px}
-.error small{color:#999;font-size:12px;display:block;margin-top:8px}
 .filter-bar{display:flex;align-items:center;gap:6px;padding:8px 12px;font-size:12px;background:#fff;border-bottom:1px solid #f0f0f0}
 .filter-bar select{padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;background:#fff}
 .filter-bar .fl{color:#999}
-.load-more-btn{background:#fb7299;border:none;color:#fff;padding:6px 28px;border-radius:16px;font-size:13px;cursor:pointer;margin:0 auto;display:block}
-.load-more-btn:disabled{opacity:.5}
 .up-info{background:#fff;padding:12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f0f0f0}
 .up-info img{width:40px;height:40px;border-radius:50%;object-fit:cover}
 .up-info .name{font-size:15px;font-weight:600}
@@ -69,29 +66,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .vp-section .sec-title{font-size:15px;font-weight:600;color:#fb7299;margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .vp-section .ai-badge{font-size:11px;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px}
 .topic{font-size:17px;font-weight:600;color:#333;margin-bottom:12px;display:block}
-.sections{margin-bottom:12px}
-.sections>.label{font-weight:500;color:#fb7299;margin-bottom:6px;display:block;font-size:13px}
+.sections{margin-bottom:12px}.sections>.label{font-weight:500;color:#fb7299;margin-bottom:6px;display:block;font-size:13px}
 .sec-item{background:#f8f9fa;border-radius:8px;padding:10px;margin-bottom:6px}
 .sec-item .part{color:#1976d2;font-weight:500;margin-bottom:4px;font-size:13px}
 .sec-item .content{color:#666;font-size:13px;line-height:1.5}
-.keypoints{margin-bottom:12px}
-.keypoints>.label{font-weight:500;color:#e65100;margin-bottom:4px;display:block;font-size:13px}
+.keypoints{margin-bottom:12px}.keypoints>.label{font-weight:500;color:#e65100;margin-bottom:4px;display:block;font-size:13px}
 .kp{font-size:13px;padding:3px 0;color:#555}
-.tags-row{display:flex;gap:8px;flex-wrap:wrap}
-.tag{font-size:12px;padding:4px 10px;border-radius:12px}
-.tag.cat{background:#e3f2fd;color:#1976d2}
-.tag.rec{background:#fff3e0;color:#e65100;font-weight:500}
-.subtitle-text{font-size:14px;color:#444;line-height:2;white-space:pre-wrap;word-break:break-all;overflow-wrap:break-word}
+.tags-row{display:flex;gap:8px;flex-wrap:wrap}.tag{font-size:12px;padding:4px 10px;border-radius:12px}
+.tag.cat{background:#e3f2fd;color:#1976d2}.tag.rec{background:#fff3e0;color:#e65100;font-weight:500}
+.subtitle-text{font-size:14px;color:#444;line-height:2;white-space:pre-wrap;word-break:break-all}
 .score-item{background:#f8f9fa;border-radius:8px;padding:6px 10px;text-align:center;min-width:54px}
 .score-item span{display:block;font-size:10px;color:#999}
 .score-item .sv{font-size:16px;font-weight:600;color:#1976d2;margin-top:2px}
-.score-item.overall{background:#e3f2fd}
-.score-item.overall .sv{color:#fb7299}
-.outline-wrap{margin:8px 0}
-.outline-item{margin-bottom:6px}
+.score-item.overall{background:#e3f2fd}.score-item.overall .sv{color:#fb7299}
+.outline-wrap{margin:8px 0}.outline-item{margin-bottom:6px}
 .outline-title{font-weight:600;color:#1976d2;font-size:13px;margin-bottom:2px}
-.outline-points{margin:0;padding-left:16px;font-size:12px;color:#666}
-.outline-points li{margin-bottom:2px}
+.outline-points{margin:0;padding-left:16px;font-size:12px;color:#666}.outline-points li{margin-bottom:2px}
 .btn-row{display:flex;gap:6px;margin:8px 0}
 .btn-row button{padding:6px 12px;border:none;border-radius:6px;font-size:12px;cursor:pointer;background:#fb7299;color:#fff}
 </style>
@@ -99,12 +89,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <body>
 <script>
 (function(){
-  var params=new URLSearchParams(location.search);
-  var bvid=params.get('bvid');
-  if(bvid){renderPage('video',{bvid:bvid,title:params.get('title')||''});return}
-  var up=params.get('up');
-  if(up){renderPage('up',{mid:up});return}
-  renderPage('home');
+var p=new URLSearchParams(location.search);
+var b=p.get('bvid');
+if(b){renderPage('video',{bvid:b,title:p.get('title')||''});return}
+var u=p.get('up');
+if(u){renderPage('up',{mid:u});return}
+renderPage('home');
 })();
 
 function fmt(n){if(n>=1e4)return(n/1e4).toFixed(1)+'万';return n.toLocaleString()}
@@ -112,36 +102,161 @@ function ts(d){return new Date(d*1000).toLocaleDateString('zh-CN')}
 function he(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function fmtTs(s){if(!s||s<0)return'';var m=Math.floor(s/60);var sec=Math.floor(s%60);return m+':'+String(sec).padStart(2,'0')}
 
-var POLL_INTERVAL=null,LOGGED_IN=false,LOGIN_UID=null;
-async function checkLogin(){try{var r=await fetch('/api/login/info');var d=await r.json();if(d.logged_in){LOGGED_IN=true;LOGIN_UID=d.user.uid;var lb=document.getElementById('loginBar');if(lb)lb.innerHTML='<img src="'+d.user.face+'" class="avatar"> <span class="uname">'+d.user.uname+'</span> <button class="logout" onclick="logout()">退出</button>';loadFollowings()}}catch(e){}}
-async function showLogin(){document.getElementById('loginModal').classList.add('show');document.getElementById('qrStatus').textContent='正在生成...';try{var r=await fetch('/api/login/generate');var d=await r.json();if(d.error){alert(d.error);closeLogin();return}document.getElementById('qrImage').src=d.qr_image;document.getElementById('qrStatus').textContent='请用B站APP扫码';POLL_INTERVAL=setInterval(function(){pollLogin(d.qrcode_key)},2000)}catch(e){document.getElementById('qrStatus').textContent='生成失败:'+e.message}}
-async function pollLogin(key){try{var r=await fetch('/api/login/poll?key='+key);var d=await r.json();if(d.code===0&&d.user){clearInterval(POLL_INTERVAL);closeLogin();checkLogin()}else if(d.code===86038){document.getElementById('qrStatus').textContent='二维码已过期';clearInterval(POLL_INTERVAL)}else if(d.code===86090){document.getElementById('qrStatus').textContent='已扫码，请确认'}else if(d.code===86101){document.getElementById('qrStatus').textContent='等待扫码...'}}catch(e){}}
-function closeLogin(){document.getElementById('loginModal').classList.remove('show');if(POLL_INTERVAL){clearInterval(POLL_INTERVAL);POLL_INTERVAL=null}}
-async function logout(){await fetch('/api/login/logout');LOGGED_IN=false;LOGIN_UID=null;location.reload()}
-async function loadFollowings(){try{var r=await fetch('/api/followings?page=1');var d=await r.json();if(d.error)return;var fs=document.getElementById('followSection');if(fs)fs.style.display='block';var fl=document.getElementById('followList');if(fl){var h='';d.users.forEach(function(u){h+='<div class="follow-card" onclick="navUP('+u.mid+')"><img src="'+u.face+'"><div class="uname">'+u.uname+'</div><div class="sign">'+he((u.sign||'').slice(0,20))+'</div></div>'});fl.innerHTML=h}}}catch(e){}}
+var POLL=null,LOGINED=false,LUID=null;
+async function checkLogin(){
+try{var r=await fetch('/api/login/info');var d=await r.json();
+if(d.logged_in){LOGINED=true;LUID=d.user.uid;
+var lb=document.getElementById('loginBar');
+if(lb)lb.innerHTML='<img src="'+d.user.face+'" class="avatar"> <span class="uname">'+d.user.uname+'</span> <button class="logout" onclick="logout()">退出</button>';loadFollowings()}
+}catch(e){}}
+async function showLogin(){
+document.getElementById('loginModal').classList.add('show');
+document.getElementById('qrStatus').textContent='正在生成...';
+try{var r=await fetch('/api/login/generate');var d=await r.json();
+if(d.error){alert(d.error);closeLogin();return}
+document.getElementById('qrImage').src=d.qr_image;
+document.getElementById('qrStatus').textContent='请用B站APP扫码';
+POLL=setInterval(function(){pollLogin(d.qrcode_key)},2000)}catch(e){
+document.getElementById('qrStatus').textContent='生成失败:'+e.message}}
+async function pollLogin(key){
+try{var r=await fetch('/api/login/poll?key='+key);var d=await r.json();
+if(d.code===0&&d.user){clearInterval(POLL);closeLogin();checkLogin()}
+else if(d.code===86038){document.getElementById('qrStatus').textContent='二维码已过期';clearInterval(POLL)}
+else if(d.code===86090){document.getElementById('qrStatus').textContent='已扫码，请确认'}
+else if(d.code===86101){document.getElementById('qrStatus').textContent='等待扫码...'}
+}catch(e){}}
+function closeLogin(){document.getElementById('loginModal').classList.remove('show');if(POLL){clearInterval(POLL);POLL=null}}
+async function logout(){await fetch('/api/login/logout');LOGINED=false;LUID=null;location.reload()}
+async function loadFollowings(){
+try{var r=await fetch('/api/followings?page=1');var d=await r.json();
+if(d.error)return;
+var fs=document.getElementById('followSection');if(fs)fs.style.display='block';
+var fl=document.getElementById('followList');
+if(fl){var h='';d.users.forEach(function(u){h+='<div class="follow-card" onclick="navUP('+u.mid+')"><img src="'+u.face+'"><div class="uname">'+u.uname+'</div><div class="sign">'+he((u.sign||'').slice(0,20))+'</div></div>'});fl.innerHTML=h}
+}catch(e){}}
 function navUP(mid){location.href=location.pathname+'?up='+mid}
 
-function renderPage(page,data){data=data||{};if(page==='home')renderHome();else if(page==='up')renderUPPage(data.mid);else if(page==='video')renderVideoPage(data.bvid,data.title)}
+function renderPage(page,data){
+data=data||{};
+if(page==='home')renderHome();
+else if(page==='up')renderUPPage(data.mid);
+else if(page==='video')renderVideoPage(data.bvid,data.title);
+}
 
 function renderHome(){
-document.body.innerHTML='<div class="header"><span class="h-title" style="font-size:20px;text-align:center;flex:1">📺 B站UP主视频速览</span></div><div class="login-bar" id="loginBar"><span style="font-size:13px;color:#999">未登录</span> <button onclick="showLogin()">🔑 扫码登录</button></div><div class="search-box"><input type="text" id="searchInput" placeholder="输入UP主名字..." autocomplete="off" onkeydown="if(event.key===\'Enter\')doSearch()"><button onclick="doSearch()">搜索</button></div><div class="follow-section" id="followSection" style="display:none"><h3>⭐ 我关注的UP主</h3><div class="follow-grid" id="followList"></div></div><div class="content" id="list"><div style="padding:60px 20px;text-align:center;color:#999;font-size:14px">👆 登录后可查看关注UP主<br><small>或直接搜索任意UP主名字</small></div></div><div class="modal" id="loginModal"><div class="modal-box"><h3>🔑 扫码登录B站</h3><p class="tip">请用B站APP扫码</p><img class="qr" id="qrImage" src="" alt="QR Code"><p class="tip" id="qrStatus">等待扫码...</p><button class="close-btn" onclick="closeLogin()">取消</button></div></div>';
-window.doSearch=function(){var name=document.getElementById('searchInput').value.trim();if(!name)return;var lst=document.getElementById('list');lst.innerHTML='<div class="loading"><div class="spinner"></div><p>搜索中...</p></div>';fetch('/api/search_up?name='+encodeURIComponent(name)).then(function(r){return r.json()}).then(function(d){if(!d.results||!d.results.length){lst.innerHTML='<div class="error">未找到</div>';return}navUP(d.results[0].mid)}).catch(function(){lst.innerHTML='<div class="error">搜索失败</div>'})};checkLogin()}
+document.body.innerHTML=
+'<div class="header"><span class="h-title" style="font-size:20px;text-align:center;flex:1">📺 B站UP主视频速览</span></div>'+
+'<div class="login-bar" id="loginBar"><span style="font-size:13px;color:#999">未登录</span> <button onclick="showLogin()">🔑 扫码登录</button></div>'+
+'<div class="search-box"><input type="text" id="searchInput" placeholder="输入UP主名字..." autocomplete="off" onkeydown="if(event.key===\'Enter\')doSearch()"><button onclick="doSearch()">搜索</button></div>'+
+'<div class="follow-section" id="followSection" style="display:none"><h3>⭐ 我关注的UP主</h3><div class="follow-grid" id="followList"></div></div>'+
+'<div class="content" id="list"><div style="padding:60px 20px;text-align:center;color:#999;font-size:14px">👆 登录后可查看关注UP主<br><small>或直接搜索任意UP主名字</small></div></div>'+
+'<div class="modal" id="loginModal"><div class="modal-box"><h3>🔑 扫码登录B站</h3><p class="tip">请用B站APP扫码</p><img class="qr" id="qrImage" src="" alt="QR"><p class="tip" id="qrStatus">等待扫码...</p><button class="close-btn" onclick="closeLogin()">取消</button></div></div>';
+window.doSearch=function(){
+var name=document.getElementById('searchInput').value.trim();if(!name)return;
+var lst=document.getElementById('list');lst.innerHTML='<div class="loading"><div class="spinner"></div><p>搜索中...</p></div>';
+fetch('/api/search_up?name='+encodeURIComponent(name)).then(function(r){return r.json()}).then(function(d){
+if(!d.results||!d.results.length){lst.innerHTML='<div class="error">未找到</div>';return}
+navUP(d.results[0].mid);
+}).catch(function(){lst.innerHTML='<div class="error">搜索失败</div>'});
+};
+checkLogin();
+}
 
-var _curMid,_curPage=1,_totalVids,_allVids=[],CURRENT_PS=30;
-function renderUPPage(mid){_curMid=mid;_curPage=1;_allVids=[];document.body.innerHTML='<div class="header"><a href="'+location.pathname+'">←</a><span class="h-title">加载中...</span></div><div class="content" id="uplist"><div class="loading"><div class="spinner"></div><p>加载视频...</p></div></div>';loadUPInfo(mid);loadUPVideos(mid,1)}
-async function loadUPInfo(mid){try{var d=await fetch('/api/all_videos?mid='+mid+'&page=1&ps=1').then(function(r){return r.json()});var vc=d.count||0;try{var sr=await fetch('/api/search_up?name='+mid).then(function(r){return r.json()});if(sr.results&&sr.results.length){var u=sr.results[0];document.querySelector('.h-title').textContent=u.uname;var si=document.createElement('div');si.className='up-info';si.innerHTML='<img src="'+u.face+'"><div><div class="name">'+u.uname+'</div><div class="sign">'+(u.sign||'').slice(0,50)+' · '+fmt(u.fans)+'粉丝 · '+fmt(vc)+'视频</div></div>';document.querySelector('.content').insertAdjacentElement('beforebegin',si)}else{document.querySelector('.h-title').textContent='UP主 (MID:'+mid+')'}}catch(e){document.querySelector('.h-title').textContent='UP主 (MID:'+mid+')'}}catch(e){document.querySelector('.h-title').textContent='UP主 (MID:'+mid+')'}}
-async function loadUPVideos(mid,page){try{var d=await fetch('/api/all_videos?mid='+mid+'&page='+page+'&ps='+CURRENT_PS).then(function(r){return r.json()});_curPage=page;_totalVids=d.count||0;_allVids=d.videos;var h='<div class="result-stats">共 '+_totalVids+'个 / 第'+page+'页</div><div class="filter-bar"><span class="fl">排序：</span><select onchange="sortV(this.value)"><option value="newest">最新发布</option><option value="hot">最多播放</option><option value="comment">最多评论</option></select></div><div id="vlist"></div>';document.getElementById('uplist').innerHTML=h;renderCards(_allVids);renderPager()}catch(e){document.getElementById('uplist').innerHTML='<div class="error">加载失败: '+e.message+'</div>'}}
-function renderCards(vids){var c='';vids.forEach(function(v){var sc=v.scores||{};var sb='<div class="score-row">';var dims={learning:'学习价值',knowledge:'知识深度',horizon:'视野拓展',overall:'综合'};for(var k in dims){var s=sc[k]||0;sb+='<span class="sb'+(s>=7?' hi':'')+'">'+dims[k]+':'+s.toFixed(1)+'</span>'}sb+='</div>';c+='<div class="card" onclick="window.open(\''+location.pathname+'?bvid='+v.bvid+'&title='+encodeURIComponent(v.title.replace(/'/g,''))+'\')"><div class="card-inner"><div class="thumb"><img src="'+v.pic+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="dur">'+v.length+'</span></div><div class="info"><div class="title">'+v.title+'</div><div class="meta"><span>📅 '+ts(v.created)+'</span><span>👁 '+fmt(v.play)+'</span><span>💬 '+fmt(v.comment)+'</span></div>'+sb+'</div></div></div>'});document.getElementById('vlist').innerHTML=c||'<div class="error">暂无视频</div>'}
-function renderPager(){var t=Math.ceil(_totalVids/CURRENT_PS);if(t<=1)return;var p=document.createElement('div');p.className='pagination';var h='<button onclick="goPage(1)"'+(CURRENT_PAGE===1?' disabled':'')+'>&lt;&lt;</button>';h+='<button onclick="goPage('+(CURRENT_PAGE-1)+')"'+(CURRENT_PAGE===1?' disabled':'')+'>&lt;</button>';var s=Math.max(1,CURRENT_PAGE-2),e=Math.min(t,CURRENT_PAGE+2);for(var i=s;i<=e;i++)h+='<button onclick="goPage('+i+')"'+(i===CURRENT_PAGE?' class="active"':'')+'>'+i+'</button>';h+='<button onclick="goPage('+(CURRENT_PAGE+1)+')"'+(CURRENT_PAGE===t?' disabled':'')+'>&gt;</button>';h+='<button onclick="goPage('+t+')"'+(CURRENT_PAGE===t?' disabled':'')+'>&gt;&gt;</button>';p.innerHTML=h;document.getElementById('uplist').appendChild(p)}
-function goPage(p){loadUPVideos(_curMid,p);window.scrollTo(0,0)}
-function sortV(order){var v=[].concat(_allVids);if(order==='hot')v.sort(function(a,b){return(b.play||0)-(a.play||0)});else if(order==='comment')v.sort(function(a,b){return(b.comment||0)-(b.comment||0)});else v.sort(function(a,b){return(b.created||0)-(a.created||0)});_allVids=v;renderCards(v)}
+var _mid,_page=1,_total,_all=[],PS=30;
+function renderUPPage(mid){
+_mid=mid;_page=1;_all=[];
+document.body.innerHTML='<div class="header"><a href="'+location.pathname+'">←</a><span class="h-title">加载中...</span></div><div class="content" id="uplist"><div class="loading"><div class="spinner"></div><p>加载视频...</p></div></div>';
+loadUPInfo(mid);
+loadUPVideos(mid,1);
+}
+async function loadUPInfo(mid){
+try{
+var d=await fetch('/api/all_videos?mid='+mid+'&page=1&ps=1').then(function(r){return r.json()});
+var vc=d.count||0;
+try{
+var sr=await fetch('/api/search_up?name='+mid).then(function(r){return r.json()});
+if(sr.results&&sr.results.length){
+var u=sr.results[0];document.querySelector('.h-title').textContent=u.uname;
+var si=document.createElement('div');si.className='up-info';
+si.innerHTML='<img src="'+u.face+'"><div><div class="name">'+u.uname+'</div><div class="sign">'+(u.sign||'').slice(0,50)+' · '+fmt(u.fans)+'粉丝 · '+fmt(vc)+'视频</div></div>';
+document.querySelector('.content').insertAdjacentElement('beforebegin',si);
+}else{document.querySelector('.h-title').textContent='UP主 (MID:'+mid+')'}
+}catch(e){document.querySelector('.h-title').textContent='UP主 (MID:'+mid+')'}
+}catch(e){document.querySelector('.h-title').textContent='UP主 (MID:'+mid+')'}
+}
+async function loadUPVideos(mid,page){
+try{
+var d=await fetch('/api/all_videos?mid='+mid+'&page='+page+'&ps='+PS).then(function(r){return r.json()});
+_page=page;_total=d.count||0;_all=d.videos;
+var h='<div class="result-stats">共 '+_total+'个 / 第'+page+'页</div>'+
+'<div class="filter-bar"><span class="fl">排序：</span><select onchange="sortV(this.value)"><option value="newest">最新发布</option><option value="hot">最多播放</option><option value="comment">最多评论</option></select></div>'+
+'<div id="vlist"></div>';
+document.getElementById('uplist').innerHTML=h;
+renderCards(_all);
+renderPager();
+}catch(e){document.getElementById('uplist').innerHTML='<div class="error">加载失败: '+e.message+'</div>'}
+}
+function renderCards(vids){
+var c='';vids.forEach(function(v){
+var sc=v.scores||{};var sb='<div class="score-row">';
+var dims={learning:'学习价值',knowledge:'知识深度',horizon:'视野拓展',overall:'综合'};
+for(var k in dims){var s=sc[k]||0;sb+='<span class="sb'+(s>=7?' hi':'')+'">'+dims[k]+':'+s.toFixed(1)+'</span>'}
+sb+='</div>';
+c+='<div class="card" onclick="window.open(\''+location.pathname+'?bvid='+v.bvid+'&title='+encodeURIComponent(v.title.replace(/'/g,''))+'\')"><div class="card-inner"><div class="thumb"><img src="'+v.pic+'" loading="lazy" onerror="this.style.display=\'none\'"><span class="dur">'+v.length+'</span></div><div class="info"><div class="title">'+v.title+'</div><div class="meta"><span>📅 '+ts(v.created)+'</span><span>👁 '+fmt(v.play)+'</span><span>💬 '+fmt(v.comment)+'</span></div>'+sb+'</div></div></div>';
+});
+document.getElementById('vlist').innerHTML=c||'<div class="error">暂无视频</div>';
+}
+function renderPager(){
+var t=Math.ceil(_total/PS);if(t<=1)return;
+var p=document.createElement('div');p.className='pagination';
+var h='<button onclick="goPage(1)"'+(_page===1?' disabled':'')+'>&lt;&lt;</button>';
+h+='<button onclick="goPage('+(_page-1)+')"'+(_page===1?' disabled':'')+'>&lt;</button>';
+var s=Math.max(1,_page-2),e=Math.min(t,_page+2);
+for(var i=s;i<=e;i++)h+='<button onclick="goPage('+i+')"'+(_page===i?' class="active"':'')+'>'+i+'</button>';
+h+='<button onclick="goPage('+(_page+1)+')"'+(_page===t?' disabled':'')+'>&gt;</button>';
+h+='<button onclick="goPage('+t+')"'+(_page===t?' disabled':'')+'>&gt;&gt;</button>';
+p.innerHTML=h;document.getElementById('uplist').appendChild(p);
+}
+function goPage(p){loadUPVideos(_mid,p);window.scrollTo(0,0)}
+function sortV(order){
+var v=[].concat(_all);
+if(order==='hot')v.sort(function(a,b){return(b.play||0)-(a.play||0)});
+else if(order==='comment')v.sort(function(a,b){return(b.comment||0)-(b.comment||0)});
+else v.sort(function(a,b){return(b.created||0)-(a.created||0)});
+_all=v;renderCards(v);
+}
 
 function renderVideoPage(bvid,title){
-document.body.innerHTML='<div class="header"><a href="javascript:history.back()">←</a><span class="h-title">'+he(title||'视频详情')+'</span></div><div class="vp-section"><div class="sec-title">🤖 AI 概括分析</div><div id="vsl" style="text-align:center;color:#999;padding:20px">DeepSeek AI 分析中...</div><div id="vsc"></div></div><div class="vp-section"><div class="sec-title" id="sst">📜 视频文字版</div><div id="ssl" style="text-align:center;color:#999;padding:20px">获取文字版中...</div><div id="ssc"></div></div><div class="btn-row" style="padding:0 12px 20px"><button onclick="window.open(\'https://www.bilibili.com/video/'+bvid+'\')">▶️ 播放</button></div>';
-loadSummary(bvid);loadSub(bvid)}
-
-async function loadSummary(bvid){try{var r=await fetch('/api/summarize?bvid='+bvid);var d=await r.json();document.getElementById('vsl').style.display='none';var h='';if(d.source==='bilibili_ai')h+='<span class="ai-badge" style="background:#fb7299;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">B站AI总结</span>';if(d.outline&&d.outline.length){h+='<div class="outline-wrap">';d.outline.forEach(function(o){h+='<div class="outline-item"><div class="outline-title">'+fmtTs(o.timestamp)+' '+he(o.title||'')+'</div>';if(o.points&&o.points.length){h+='<ul class="outline-points">';o.points.forEach(function(p){h+='<li>'+he(p.text)+'</li>'});h+='</ul>'}h+='</div>'});h+='</div>'}if(d.summary)h+='<div style="line-height:1.7;margin:8px 0">'+he(d.summary||'')+'</div>';document.getElementById('vsc').innerHTML=h||'<div style="color:#999;text-align:center;padding:10px">暂无概括数据</div>'}catch(e){document.getElementById('vsl').style.display='none';document.getElementById('vsc').innerHTML='<div style="color:#e74c3c;text-align:center;padding:10px">AI概括失败</div>'}}
-async function loadSub(bvid){try{var r=await fetch('/api/subtitle?bvid='+bvid);var d=await r.json();document.getElementById('ssl').style.display='none';if(d.source==='bilibili_ai')document.getElementById('sst').innerHTML='📜 AI字幕（B站识别）';else if(d.subtitles&&d.subtitles.length)document.getElementById('sst').innerHTML='📜 CC字幕 ('+d.subtitles[0].lan_doc+')';if(d.text&&d.text.length>20)document.getElementById('ssc').innerHTML='<div class="subtitle-text">'+he(d.text)+'</div>';else document.getElementById('ssc').innerHTML='<div style="color:#999;text-align:center;padding:20px">'+(d.text||'暂无可用的文字版内容')+'</div>'}catch(e){document.getElementById('ssl').style.display='none';document.getElementById('ssc').innerHTML='<div style="color:#e74c3c;text-align:center;padding:10px">获取失败</div>'}}
+document.body.innerHTML='<div class="header"><a href="javascript:history.back()">←</a><span class="h-title">'+he(title||'视频详情')+'</span></div>'+
+'<div class="vp-section"><div class="sec-title">🤖 AI 概括分析</div><div id="vsl" style="text-align:center;color:#999;padding:20px">DeepSeek AI 分析中...</div><div id="vsc"></div></div>'+
+'<div class="vp-section"><div class="sec-title" id="sst">📜 视频文字版</div><div id="ssl" style="text-align:center;color:#999;padding:20px">获取文字版中...</div><div id="ssc"></div></div>'+
+'<div class="btn-row" style="padding:0 12px 20px"><button onclick="window.open(\'https://www.bilibili.com/video/'+bvid+'\')">▶️ 播放</button></div>';
+loadSummary(bvid);
+loadSub(bvid);
+}
+async function loadSummary(bvid){
+try{
+var r=await fetch('/api/summarize?bvid='+bvid);var d=await r.json();
+document.getElementById('vsl').style.display='none';var h='';
+if(d.source==='bilibili_ai')h+='<span class="ai-badge" style="background:#fb7299;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px">B站AI总结</span>';
+if(d.outline&&d.outline.length){h+='<div class="outline-wrap">';
+d.outline.forEach(function(o){h+='<div class="outline-item"><div class="outline-title">'+fmtTs(o.timestamp)+' '+he(o.title||'')+'</div>';
+if(o.points&&o.points.length){h+='<ul class="outline-points">';o.points.forEach(function(p){h+='<li>'+he(p.text)+'</li>'});h+='</ul>'}
+h+='</div>'});h+='</div>';}
+if(d.summary)h+='<div style="line-height:1.7;margin:8px 0">'+he(d.summary||'')+'</div>';
+document.getElementById('vsc').innerHTML=h||'<div style="color:#999;text-align:center;padding:10px">暂无概括数据</div>';
+}catch(e){document.getElementById('vsl').style.display='none';document.getElementById('vsc').innerHTML='<div style="color:#e74c3c;text-align:center;padding:10px">AI概括失败</div>'}
+}
+async function loadSub(bvid){
+try{
+var r=await fetch('/api/subtitle?bvid='+bvid);var d=await r.json();
+document.getElementById('ssl').style.display='none';
+if(d.source==='bilibili_ai')document.getElementById('sst').innerHTML='📜 AI字幕（B站识别）';
+else if(d.subtitles&&d.subtitles.length)document.getElementById('sst').innerHTML='📜 CC字幕 ('+d.subtitles[0].lan_doc+')';
+if(d.text&&d.text.length>20)document.getElementById('ssc').innerHTML='<div class="subtitle-text">'+he(d.text)+'</div>';
+else document.getElementById('ssc').innerHTML='<div style="color:#999;text-align:center;padding:20px">'+(d.text||'暂无可用的文字版内容')+'</div>';
+}catch(e){document.getElementById('ssl').style.display='none';document.getElementById('ssc').innerHTML='<div style="color:#e74c3c;text-align:center;padding:10px">获取失败</div>'}
+}
 </script>
 </body>
 </html>
