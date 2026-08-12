@@ -137,6 +137,20 @@ def _fix_url(url):
         return url.replace('http://', 'https://', 1)
     return url
 
+def _fetch_buvid(session):
+    """为 session 补充 buvid3/buvid4（B站风控必需）"""
+    if session.cookies.get('buvid3'):
+        return
+    try:
+        spi = session.get('https://api.bilibili.com/x/frontend/finger/spi', timeout=10).json()
+        d = spi.get('data', {})
+        if d.get('b_3'):
+            session.cookies.set('buvid3', d['b_3'], domain='.bilibili.com')
+        if d.get('b_4'):
+            session.cookies.set('buvid4', d['b_4'], domain='.bilibili.com')
+    except:
+        pass
+
 def _ensure_public():
     global _public_session
     if _public_session is None:
@@ -146,16 +160,7 @@ def _ensure_public():
             _public_session.get('https://www.bilibili.com/', timeout=10)
         except:
             pass
-        # 获取 buvid3/buvid4（B站风控必需）
-        try:
-            spi = _public_session.get('https://api.bilibili.com/x/frontend/finger/spi', timeout=10).json()
-            d = spi.get('data', {})
-            if d.get('b_3'):
-                _public_session.cookies.set('buvid3', d['b_3'], domain='.bilibili.com')
-            if d.get('b_4'):
-                _public_session.cookies.set('buvid4', d['b_4'], domain='.bilibili.com')
-        except:
-            pass
+        _fetch_buvid(_public_session)
     return _public_session
 
 def _ensure_login():
@@ -163,6 +168,7 @@ def _ensure_login():
     if _login_session is None:
         _login_session = requests.Session()
         _login_session.headers.update(HEADERS)
+    _fetch_buvid(_login_session)
     return _login_session
 
 def _get_session():
