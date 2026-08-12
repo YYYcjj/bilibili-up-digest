@@ -55,7 +55,6 @@ def _save_login_state():
                     cookies[cookie.name] = cookie.value
         with open(_LOGIN_STATE_FILE, 'w') as f:
             json.dump({'info': _login_info, 'cookies': cookies}, f, ensure_ascii=False)
-        # 同步到 GitHub 持久化
         if _GITHUB_TOKEN:
             _save_to_github()
     except Exception as e:
@@ -282,9 +281,14 @@ def handle_api(path, query):
             except: pass
         return 200, {'code': code, 'message': data.get('data', {}).get('message',''), 'user': _login_info}
 
-    if path == '/api/login/info': return 200, {'logged_in': bool(_login_info), 'user': _login_info}
-    if path == '/api/login/logout': _login_session = None; _login_info = None
-        if os.path.exists(_LOGIN_STATE_FILE): os.remove(_LOGIN_STATE_FILE)
+    if path == '/api/login/info':
+        return 200, {'logged_in': bool(_login_info), 'user': _login_info}
+
+    if path == '/api/login/logout':
+        _login_session = None
+        _login_info = None
+        if os.path.exists(_LOGIN_STATE_FILE):
+            os.remove(_LOGIN_STATE_FILE)
         return 200, {'ok': True}
 
     if path == '/api/followings':
@@ -313,9 +317,12 @@ def handle_api(path, query):
         except Exception as e: return 500, {'error': str(e)}
 
     if path == '/api/all_videos':
-        try: mid = int(query.get('mid', ['0'])[0])
-        except (ValueError, TypeError): return 400, {'error': 'mid 参数无效'}
-        page = int(query.get('page', ['1'])[0]); ps = int(query.get('ps', ['30'])[0])
+        try:
+            mid = int(query.get('mid', ['0'])[0])
+        except (ValueError, TypeError):
+            return 400, {'error': 'mid 参数无效'}
+        page = int(query.get('page', ['1'])[0])
+        ps = int(query.get('ps', ['30'])[0])
         order = query.get('order', ['pubdate'])[0]
         if not mid: return 400, {'error': '缺少 mid'}
         ps = max(10, min(50, ps))
@@ -326,8 +333,17 @@ def handle_api(path, query):
             count = data['data']['page']['count']
             videos = []
             for v in vlist:
-                videos.append({'bvid': v['bvid'], 'title': v['title'], 'description': v.get('description',''), 'length': v['length'], 'created': v['created'], 'play': v.get('play',0), 'comment': v.get('comment',0), 'video_review': v.get('video_review',0), 'pic': _fix_url(v.get('pic','')), 'tname': v.get('tname',''), 'scores': compute_scores({'play':v.get('play',0),'length':v['length']})})
-            return 200, {'videos': videos, 'total': len(videos), 'count': count, 'page': page, 'ps': ps, 'has_more': page * ps < count}
+                videos.append({
+                    'bvid': v['bvid'], 'title': v['title'],
+                    'description': v.get('description',''),
+                    'length': v['length'], 'created': v['created'],
+                    'play': v.get('play',0), 'comment': v.get('comment',0),
+                    'video_review': v.get('video_review',0), 'pic': _fix_url(v.get('pic','')),
+                    'tname': v.get('tname',''),
+                    'scores': compute_scores({'play':v.get('play',0),'length':v['length']}),
+                })
+            return 200, {'videos': videos, 'total': len(videos), 'count': count,
+                         'page': page, 'ps': ps, 'has_more': page * ps < count}
         except Exception as e: return 500, {'error': str(e)}
 
     if path == '/api/summarize':
@@ -335,12 +351,24 @@ def handle_api(path, query):
         if not bvid: return 400, {'error': '缺少 bvid'}
         try:
             info = _bili_get('/x/web-interface/view', {'bvid': bvid})
-            vid = info['data']; cid = vid['cid']; up_mid = vid.get('owner', {}).get('mid', 0)
+            vid = info['data']
+            cid = vid['cid']
+            up_mid = vid.get('owner', {}).get('mid', 0)
             bili_ai = _get_bilibili_ai(bvid, cid, up_mid)
             if bili_ai and (bili_ai['has_summary'] or bili_ai['has_subtitle']):
-                return 200, {'source': 'bilibili_ai', 'summary': bili_ai['summary'] or vid.get('title', ''), 'outline': bili_ai['outline'], 'category': vid.get('tname', '')}
-            vid_data = {'title': vid['title'], 'desc': vid.get('desc',''), 'length': vid['duration'], 'tname': vid.get('tname',''), 'tags': [t['tag_name'] for t in vid.get('tags',[])][:10]}
-            summary = summarize_video(vid_data); summary['source'] = 'llm'
+                return 200, {
+                    'source': 'bilibili_ai',
+                    'summary': bili_ai['summary'] or vid.get('title', ''),
+                    'outline': bili_ai['outline'],
+                    'category': vid.get('tname', ''),
+                }
+            vid_data = {
+                'title': vid['title'], 'desc': vid.get('desc',''),
+                'length': vid['duration'],
+                'tname': vid.get('tname',''), 'tags': [t['tag_name'] for t in vid.get('tags',[])][:10]
+            }
+            summary = summarize_video(vid_data)
+            summary['source'] = 'llm'
             return 200, summary
         except Exception as e: return 500, {'error': str(e)}
 
@@ -349,10 +377,15 @@ def handle_api(path, query):
         if not bvid: return 400, {'error': '缺少 bvid'}
         try:
             info = _bili_get('/x/web-interface/view', {'bvid': bvid})
-            cid = info['data']['cid']; up_mid = info['data'].get('owner', {}).get('mid', 0)
+            cid = info['data']['cid']
+            up_mid = info['data'].get('owner', {}).get('mid', 0)
             bili_ai = _get_bilibili_ai(bvid, cid, up_mid)
             if bili_ai and bili_ai['has_subtitle']:
-                return 200, {'source': 'bilibili_ai', 'text': bili_ai['subtitle_text'], 'insufficient': False, 'subtitles': [{'lan': 'zh', 'lan_doc': 'AI字幕'}]}
+                return 200, {
+                    'source': 'bilibili_ai',
+                    'text': bili_ai['subtitle_text'],
+                    'insufficient': False, 'subtitles': [{'lan': 'zh', 'lan_doc': 'AI字幕'}],
+                }
             result = get_subtitle(bvid)
             return 200, result
         except Exception as e: return 200, {'text': '', 'insufficient': True, 'subtitles': [], 'error': str(e)}
@@ -515,6 +548,7 @@ loadUPInfo(mid);
 loadUPVideos(mid,1);
 }
 async function loadUPInfo(mid){
+if(!mid)return;
 try{
 var d=await fetch('/api/all_videos?mid='+mid+'&page=1&ps=1').then(function(r){return r.json()});
 var vc=d.count||0;
