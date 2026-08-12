@@ -14,11 +14,7 @@ LLM_API_BASE=os.environ.get('LLM_API_BASE','https://api.openai.com/v1')
 LLM_MODEL=os.environ.get('LLM_MODEL','gpt-4o-mini')
 MIXIN_KEY_ENC_TAB=[46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,52,44,34]
 HEADERS={'User-Agent':'Mozilla/5.0','Referer':'https://www.bilibili.com/'}
-_public_session=None
-_login_session=None
-_login_info=None
-_wbi_cache=None
-_wbi_cache_time=0
+_public_session=None;_login_session=None;_login_info=None;_wbi_cache=None;_wbi_cache_time=0
 _LOGIN_STATE_FILE=os.path.join(os.path.dirname(os.path.abspath(__file__)),'.login_state.json')
 def _save_login_state():
  if not _login_info:return
@@ -53,7 +49,10 @@ def _fix_url(u):
  return u
 def _ensure_public():
  global _public_session
- if _public_session is None:_public_session=requests.Session();_public_session.headers.update(HEADERS)
+ if _public_session is None:
+  _public_session=requests.Session();_public_session.headers.update(HEADERS)
+  try:_public_session.get('https://www.bilibili.com/',timeout=10)
+  except:pass
  return _public_session
 def _ensure_login():
  global _login_session
@@ -63,8 +62,7 @@ def _get_session():
  if _login_session and _login_info:return _login_session
  return _ensure_public()
 def _get_wbi_keys():
- global _wbi_cache,_wbi_cache_time
- now=time.time()
+ global _wbi_cache,_wbi_cache_time;now=time.time()
  if _wbi_cache and(now-_wbi_cache_time)<900:return _wbi_cache
  s=_ensure_public();r=s.get('https://api.bilibili.com/x/web-interface/nav',timeout=10);d=r.json()
  w=d['data']['wbi_img'];ik=re.search(r'wbi/(.*?)\.',w['img_url']).group(1);sk=re.search(r'wbi/(.*?)\.',w['sub_url']).group(1)
@@ -114,11 +112,9 @@ def _get_bilibili_ai(bvid,cid,up_mid=0):
   params=_sign_params({'bvid':bvid,'cid':cid,'up_mid':up_mid});d=_bili_get('/x/web-interface/view/conclusion/get',params)
   dd=d.get('data',{})
   if dd.get('code')!=0:return None
-  mr=dd.get('model_result',{});summary=mr.get('summary','');outline=mr.get('outline',[]);sl=mr.get('subtitle',[])
-  st=''
+  mr=dd.get('model_result',{});summary=mr.get('summary','');outline=mr.get('outline',[]);sl=mr.get('subtitle',[]);st=''
   if sl and sl[0].get('part_subtitle'):
-   ps=sl[0]['part_subtitle']
-   st='\n'.join('['+str(int(p['start_timestamp'])//60).zfill(2)+':'+str(int(p['start_timestamp'])%60).zfill(2)+'] '+p['content']for p in ps[:300])
+   ps=sl[0]['part_subtitle'];st='\n'.join('['+str(int(p['start_timestamp'])//60).zfill(2)+':'+str(int(p['start_timestamp'])%60).zfill(2)+'] '+p['content']for p in ps[:300])
   return{'summary':summary,'outline':[{'title':o.get('title',''),'timestamp':o.get('timestamp',0),'points':[{'ts':p.get('timestamp',0),'text':p.get('content','')}for p in o.get('part_outline',[])]}for o in outline],'subtitle_text':st,'has_summary':bool(summary),'has_subtitle':bool(st)}
  except:return None
 def handle_api(path,query):
@@ -157,8 +153,7 @@ def handle_api(path,query):
   name=query.get('name',[''])[0]
   if not name:return 400,{'error':'缺少name'}
   try:
-   params=_sign_params({'search_type':'bili_user','keyword':name})
-   d=_bili_get('/x/web-interface/search/type',params)
+   d=_bili_get('/x/web-interface/search/type',{'search_type':'bili_user','keyword':name})
    results=[]
    for u in(d.get('data',{}).get('result',[])or[]):results.append({'mid':u['mid'],'uname':u['uname'],'sign':u.get('usign',''),'fans':u.get('fans',0),'videos':u.get('videos',0),'face':_fix_url(u.get('upic',''))})
    return 200,{'results':results}
