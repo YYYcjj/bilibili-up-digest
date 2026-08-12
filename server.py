@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""B站UP主视频速览 Web 服务 - 支持登录+关注UP主+AI概括+字幕"""
+"""B站UP主视频速览 Web 服务 - 支持登录+关注UP主+AI概括+字幕+登录持久化"""
 
 import json, re, hashlib, time, io, base64, os
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -40,8 +40,12 @@ _login_info = None
 _wbi_cache = None
 _wbi_cache_time = 0
 _LOGIN_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.login_state.json')
+_GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
+_GITHUB_REPO = 'YYYcjj/bilibili-up-digest'
+_GITHUB_STATE_PATH = '.login_state.json'
 
 def _save_login_state():
+    """保存登录状态到文件"""
     if not _login_info: return
     try:
         cookies = {}
@@ -51,12 +55,52 @@ def _save_login_state():
                     cookies[cookie.name] = cookie.value
         with open(_LOGIN_STATE_FILE, 'w') as f:
             json.dump({'info': _login_info, 'cookies': cookies}, f, ensure_ascii=False)
+        # 同步到 GitHub 持久化
+        if _GITHUB_TOKEN:
+            _save_to_github()
     except Exception as e:
-        print(f'[WARN] {e}')
+        print(f'[WARN] 保存登录状态失败: {e}')
+
+def _save_to_github():
+    """上传登录状态到 GitHub（持久化）"""
+    try:
+        with open(_LOGIN_STATE_FILE) as f:
+            content = f.read()
+        b64 = base64.b64encode(content.encode()).decode()
+        url = f'https://api.github.com/repos/{_GITHUB_REPO}/contents/{_GITHUB_STATE_PATH}'
+        r = requests.get(url, headers={'Authorization': f'Bearer {_GITHUB_TOKEN}'}, timeout=10)
+        sha = r.json().get('sha', '') if r.status_code == 200 else ''
+        body = {'message': 'save login state', 'content': b64, 'branch': 'main'}
+        if sha:
+            body['sha'] = sha
+        requests.put(url, headers={'Authorization': f'Bearer {_GITHUB_TOKEN}'}, json=body, timeout=10)
+        print('[INFO] 登录状态已同步到 GitHub')
+    except Exception as e:
+        print(f'[WARN] GitHub 同步失败: {e}')
+
+def _load_from_github():
+    """从 GitHub 下载登录状态"""
+    try:
+        url = f'https://api.github.com/repos/{_GITHUB_REPO}/contents/{_GITHUB_STATE_PATH}'
+        r = requests.get(url, headers={'Authorization': f'Bearer {_GITHUB_TOKEN}'}, timeout=10)
+        if r.status_code != 200:
+            return
+        data = r.json()
+        decoded = base64.b64decode(data.get('content', '')).decode()
+        with open(_LOGIN_STATE_FILE, 'w') as f:
+            f.write(decoded)
+        print('[INFO] 从 GitHub 恢复登录状态')
+    except Exception as e:
+        print(f'[WARN] GitHub 下载失败: {e}')
 
 def _load_login_state():
+    """从文件加载登录状态"""
     global _login_session, _login_info
-    if not os.path.exists(_LOGIN_STATE_FILE): return False
+    if not os.path.exists(_LOGIN_STATE_FILE):
+        if _GITHUB_TOKEN:
+            _load_from_github()
+    if not os.path.exists(_LOGIN_STATE_FILE):
+        return False
     try:
         with open(_LOGIN_STATE_FILE) as f:
             state = json.load(f)
@@ -159,8 +203,7 @@ def _bili_get(path, params=None):
     return data
 
 def summarize_video(vid):
-    if not LLM_API_KEY:
-        return {'topic': vid.get('title',''), 'summary': '未配置AI Key', 'recommendation': '可选', 'category': '未知'}
+    if not LLM_API_KEY: return {'topic': vid.get('title',''), 'summary': '未配置AI Key', 'recommendation': '可选', 'category': '未知'}
     try:
         prompt = f"""对以下B站视频进行简短概括（30-60字）并给出推荐度：
 
@@ -172,13 +215,10 @@ def summarize_video(vid):
         r = requests.post(f"{LLM_API_BASE}/chat/completions", headers={"Authorization": f"Bearer {LLM_API_KEY}"}, json={"model": LLM_MODEL, "messages": [{"role":"user","content":prompt}], "temperature":0.3, "max_tokens":200}, timeout=20)
         d = r.json()
         txt = d['choices'][0]['message']['content'].strip()
-        if '```json' in txt:
-            txt = txt.split('```json')[1].split('```')[0]
-        elif '```' in txt:
-            txt = txt.split('```')[1].split('```')[0]
+        if '```json' in txt: txt = txt.split('```json')[1].split('```')[0]
+        elif '```' in txt: txt = txt.split('```')[1].split('```')[0]
         return json.loads(txt)
-    except Exception as e:
-        return {'topic': vid.get('title',''), 'summary': f'AI失败: {str(e)[:50]}', 'recommendation': '可选', 'category': '未知'}
+    except Exception as e: return {'topic': vid.get('title',''), 'summary': f'AI失败: {str(e)[:50]}', 'recommendation': '可选', 'category': '未知'}
 
 def get_subtitle(bvid):
     try:
@@ -186,24 +226,21 @@ def get_subtitle(bvid):
         cid = info['data']['cid']
         player = _bili_get('/x/player/v2', {'bvid': bvid, 'cid': cid})
         subs = player.get('data', {}).get('subtitle', {}).get('subtitles', [])
-        if not subs:
-            return {'subtitles': [], 'text': '该视频没有字幕'}
+        if not subs: return {'subtitles': [], 'text': '该视频没有字幕'}
         sub_url = _fix_url(subs[0]['subtitle_url'])
         sub_resp = requests.get(sub_url, timeout=15)
         sub_data = sub_resp.json()
         body = sub_data.get('body', [])
         text = '\n'.join([f"{i+1}. {item['content']}" for i, item in enumerate(body)])
         return {'subtitles': [{'lan': subs[0].get('lan',''), 'lan_doc': subs[0].get('lan_doc','')}], 'text': text, 'total': len(body)}
-    except Exception as e:
-        return {'subtitles': [], 'text': f'获取失败: {str(e)}'}
+    except Exception as e: return {'subtitles': [], 'text': f'获取失败: {str(e)}'}
 
 def _get_bilibili_ai(bvid, cid, up_mid=0):
     try:
         params = _sign_params({'bvid': bvid, 'cid': cid, 'up_mid': up_mid})
         data = _bili_get('/x/web-interface/view/conclusion/get', params)
         d = data.get('data', {})
-        if d.get('code') != 0:
-            return None
+        if d.get('code') != 0: return None
         mr = d.get('model_result', {})
         summary = mr.get('summary', '')
         outline = mr.get('outline', [])
@@ -211,21 +248,9 @@ def _get_bilibili_ai(bvid, cid, up_mid=0):
         subtitle_text = ''
         if subtitle_list and subtitle_list[0].get('part_subtitle'):
             parts = subtitle_list[0]['part_subtitle']
-            subtitle_text = '\n'.join([
-                f"[{int(p['start_timestamp'])//60:02d}:{int(p['start_timestamp'])%60:02d}] {p['content']}"
-                for p in parts
-            ])
-        return {
-            'summary': summary,
-            'outline': [{'title': o.get('title',''), 'timestamp': o.get('timestamp',0),
-                         'points': [{'ts': p.get('timestamp',0), 'text': p.get('content','')} for p in o.get('part_outline',[])]}
-                        for o in outline],
-            'subtitle_text': subtitle_text,
-            'has_summary': bool(summary),
-            'has_subtitle': bool(subtitle_text),
-        }
-    except:
-        return None
+            subtitle_text = '\n'.join([f"[{int(p['start_timestamp'])//60:02d}:{int(p['start_timestamp'])%60:02d}] {p['content']}" for p in parts])
+        return {'summary': summary, 'outline': [{'title': o.get('title',''), 'timestamp': o.get('timestamp',0), 'points': [{'ts': p.get('timestamp',0), 'text': p.get('content','')} for p in o.get('part_outline',[])]} for o in outline], 'subtitle_text': subtitle_text, 'has_summary': bool(summary), 'has_subtitle': bool(subtitle_text)}
+    except: return None
 
 def handle_api(path, query):
     global _login_session, _login_info
@@ -236,11 +261,8 @@ def handle_api(path, query):
         resp = s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/generate', timeout=10)
         data = resp.json()
         if data.get('code') != 0: return 500, {'error': data.get('message','')}
-        qr_url = data['data']['url']
-        qr_key = data['data']['qrcode_key']
-        img = qrcode.make(qr_url)
-        buf = io.BytesIO()
-        img.save(buf, format='PNG')
+        qr_url = data['data']['url']; qr_key = data['data']['qrcode_key']
+        img = qrcode.make(qr_url); buf = io.BytesIO(); img.save(buf, format='PNG')
         b64 = base64.b64encode(buf.getvalue()).decode()
         return 200, {'qrcode_key': qr_key, 'qr_image': f'data:image/png;base64,{b64}'}
 
@@ -260,12 +282,8 @@ def handle_api(path, query):
             except: pass
         return 200, {'code': code, 'message': data.get('data', {}).get('message',''), 'user': _login_info}
 
-    if path == '/api/login/info':
-        return 200, {'logged_in': bool(_login_info), 'user': _login_info}
-
-    if path == '/api/login/logout':
-        _login_session = None
-        _login_info = None
+    if path == '/api/login/info': return 200, {'logged_in': bool(_login_info), 'user': _login_info}
+    if path == '/api/login/logout': _login_session = None; _login_info = None
         if os.path.exists(_LOGIN_STATE_FILE): os.remove(_LOGIN_STATE_FILE)
         return 200, {'ok': True}
 
@@ -295,12 +313,9 @@ def handle_api(path, query):
         except Exception as e: return 500, {'error': str(e)}
 
     if path == '/api/all_videos':
-        try:
-            mid = int(query.get('mid', ['0'])[0])
-        except (ValueError, TypeError):
-            return 400, {'error': 'mid 参数无效'}
-        page = int(query.get('page', ['1'])[0])
-        ps = int(query.get('ps', ['30'])[0])
+        try: mid = int(query.get('mid', ['0'])[0])
+        except (ValueError, TypeError): return 400, {'error': 'mid 参数无效'}
+        page = int(query.get('page', ['1'])[0]); ps = int(query.get('ps', ['30'])[0])
         order = query.get('order', ['pubdate'])[0]
         if not mid: return 400, {'error': '缺少 mid'}
         ps = max(10, min(50, ps))
@@ -311,17 +326,8 @@ def handle_api(path, query):
             count = data['data']['page']['count']
             videos = []
             for v in vlist:
-                videos.append({
-                    'bvid': v['bvid'], 'title': v['title'],
-                    'description': v.get('description',''),
-                    'length': v['length'], 'created': v['created'],
-                    'play': v.get('play',0), 'comment': v.get('comment',0),
-                    'video_review': v.get('video_review',0), 'pic': _fix_url(v.get('pic','')),
-                    'tname': v.get('tname',''),
-                    'scores': compute_scores({'play':v.get('play',0),'length':v['length']}),
-                })
-            return 200, {'videos': videos, 'total': len(videos), 'count': count,
-                         'page': page, 'ps': ps, 'has_more': page * ps < count}
+                videos.append({'bvid': v['bvid'], 'title': v['title'], 'description': v.get('description',''), 'length': v['length'], 'created': v['created'], 'play': v.get('play',0), 'comment': v.get('comment',0), 'video_review': v.get('video_review',0), 'pic': _fix_url(v.get('pic','')), 'tname': v.get('tname',''), 'scores': compute_scores({'play':v.get('play',0),'length':v['length']})})
+            return 200, {'videos': videos, 'total': len(videos), 'count': count, 'page': page, 'ps': ps, 'has_more': page * ps < count}
         except Exception as e: return 500, {'error': str(e)}
 
     if path == '/api/summarize':
@@ -329,24 +335,12 @@ def handle_api(path, query):
         if not bvid: return 400, {'error': '缺少 bvid'}
         try:
             info = _bili_get('/x/web-interface/view', {'bvid': bvid})
-            vid = info['data']
-            cid = vid['cid']
-            up_mid = vid.get('owner', {}).get('mid', 0)
+            vid = info['data']; cid = vid['cid']; up_mid = vid.get('owner', {}).get('mid', 0)
             bili_ai = _get_bilibili_ai(bvid, cid, up_mid)
             if bili_ai and (bili_ai['has_summary'] or bili_ai['has_subtitle']):
-                return 200, {
-                    'source': 'bilibili_ai',
-                    'summary': bili_ai['summary'] or vid.get('title', ''),
-                    'outline': bili_ai['outline'],
-                    'category': vid.get('tname', ''),
-                }
-            vid_data = {
-                'title': vid['title'], 'desc': vid.get('desc',''),
-                'length': vid['duration'],
-                'tname': vid.get('tname',''), 'tags': [t['tag_name'] for t in vid.get('tags',[])][:10]
-            }
-            summary = summarize_video(vid_data)
-            summary['source'] = 'llm'
+                return 200, {'source': 'bilibili_ai', 'summary': bili_ai['summary'] or vid.get('title', ''), 'outline': bili_ai['outline'], 'category': vid.get('tname', '')}
+            vid_data = {'title': vid['title'], 'desc': vid.get('desc',''), 'length': vid['duration'], 'tname': vid.get('tname',''), 'tags': [t['tag_name'] for t in vid.get('tags',[])][:10]}
+            summary = summarize_video(vid_data); summary['source'] = 'llm'
             return 200, summary
         except Exception as e: return 500, {'error': str(e)}
 
@@ -355,15 +349,10 @@ def handle_api(path, query):
         if not bvid: return 400, {'error': '缺少 bvid'}
         try:
             info = _bili_get('/x/web-interface/view', {'bvid': bvid})
-            cid = info['data']['cid']
-            up_mid = info['data'].get('owner', {}).get('mid', 0)
+            cid = info['data']['cid']; up_mid = info['data'].get('owner', {}).get('mid', 0)
             bili_ai = _get_bilibili_ai(bvid, cid, up_mid)
             if bili_ai and bili_ai['has_subtitle']:
-                return 200, {
-                    'source': 'bilibili_ai',
-                    'text': bili_ai['subtitle_text'],
-                    'insufficient': False, 'subtitles': [{'lan': 'zh', 'lan_doc': 'AI字幕'}],
-                }
+                return 200, {'source': 'bilibili_ai', 'text': bili_ai['subtitle_text'], 'insufficient': False, 'subtitles': [{'lan': 'zh', 'lan_doc': 'AI字幕'}]}
             result = get_subtitle(bvid)
             return 200, result
         except Exception as e: return 200, {'text': '', 'insufficient': True, 'subtitles': [], 'error': str(e)}
@@ -401,18 +390,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .follow-card .uname{font-size:11px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .follow-card .sign{font-size:10px;color:#999;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .content{padding:0 12px;padding-bottom:80px}
-.card{background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer}
-.card-inner{display:flex}
+.card{background:#fff;border-radius:12px;margin-bottom:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer}.card-inner{display:flex}
 .card .thumb{width:130px;min-width:130px;height:82px;background:#eee;position:relative;overflow:hidden}
 .card .thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .card .dur{position:absolute;right:4px;bottom:4px;background:rgba(0,0,0,.75);color:#fff;font-size:10px;padding:2px 5px;border-radius:3px}
 .card .info{flex:1;padding:10px 12px;min-width:0}
 .card .title{font-size:14px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:4px}
-.card .meta{font-size:11px;color:#999;display:flex;gap:10px;flex-wrap:wrap}
-.card .meta span{white-space:nowrap}
-.score-row{display:flex;gap:3px;margin-top:3px;flex-wrap:wrap}
-.score-row .sb{font-size:10px;padding:1px 5px;border-radius:6px;background:#f0f0f0;color:#888;white-space:nowrap}
-.score-row .sb.hi{background:#e8f5e9;color:#388e3c}
+.card .meta{font-size:11px;color:#999;display:flex;gap:10px;flex-wrap:wrap}.card .meta span{white-space:nowrap}
+.score-row{display:flex;gap:3px;margin-top:3px;flex-wrap:wrap}.score-row .sb{font-size:10px;padding:1px 5px;border-radius:6px;background:#f0f0f0;color:#888;white-space:nowrap}.score-row .sb.hi{background:#e8f5e9;color:#388e3c}
 .result-stats{text-align:center;font-size:12px;color:#999;padding:8px 0 4px}
 .loading{padding:60px 20px;text-align:center;color:#999}
 .loading .spinner{display:inline-block;width:32px;height:32px;border:3px solid #eee;border-top-color:#fb7299;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:10px}
@@ -423,13 +408,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .filter-bar .fl{color:#999}
 .up-info{background:#fff;padding:12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f0f0f0}
 .up-info img{width:40px;height:40px;border-radius:50%;object-fit:cover}
-.up-info .name{font-size:15px;font-weight:600}
-.up-info .sign{font-size:11px;color:#999;margin-top:2px}
+.up-info .name{font-size:15px;font-weight:600}.up-info .sign{font-size:11px;color:#999;margin-top:2px}
 .modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center}
 .modal.show{display:flex}
 .modal-box{background:#fff;border-radius:16px;padding:24px;max-width:300px;width:90%;text-align:center}
-.modal-box h3{font-size:18px;margin-bottom:8px}
-.modal-box .qr{width:200px;height:200px;margin:12px auto;display:block}
+.modal-box h3{font-size:18px;margin-bottom:8px}.modal-box .qr{width:200px;height:200px;margin:12px auto;display:block}
 .modal-box .tip{font-size:13px;color:#999}
 .modal-box .close-btn{margin-top:16px;padding:8px 24px;border:1px solid #ddd;border-radius:20px;background:#fff;color:#666;font-size:14px;cursor:pointer}
 .pagination{display:flex;justify-content:center;gap:4px;padding:12px;flex-wrap:wrap}
@@ -659,6 +642,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__=='__main__':
     print(f'[INFO] 启动B站UP主视频速览 端口:{PORT}')
     print(f'[INFO] LLM: {"已配置" if LLM_API_KEY else "未配置"}')
+    print(f'[INFO] GitHub持久化: {"已配置" if _GITHUB_TOKEN else "未配置"}')
     if _load_login_state():
         print(f'[INFO] 登录已恢复: {_login_info["uname"]}')
     HTTPServer(('0.0.0.0',PORT),Handler).serve_forever()
