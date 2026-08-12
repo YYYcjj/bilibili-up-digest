@@ -1,403 +1,228 @@
 #!/usr/bin/env python3
-"""B站UP主视频速览 Web 服务 - 支持登录+关注UP主+AI概括+字幕+登录持久化"""
-
-import json, re, hashlib, time, io, base64, os
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs, urlencode
+"""B站UP主视频速览 Web 服务"""
+import json,re,hashlib,time,io,base64,os
+from http.server import HTTPServer,BaseHTTPRequestHandler
+from urllib.parse import urlparse,parse_qs,urlencode
 import requests
-
-try:
-    import qrcode
-    QR_AVAILABLE = True
-except:
-    QR_AVAILABLE = False
-
-try:
-    from PIL import Image
-    PIL_AVAILABLE = True
-except:
-    PIL_AVAILABLE = False
-
-PORT = int(os.environ.get('PORT', 3457))
-
-LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
-LLM_API_BASE = os.environ.get('LLM_API_BASE', 'https://api.openai.com/v1')
-LLM_MODEL = os.environ.get('LLM_MODEL', 'gpt-4o-mini')
-
-MIXIN_KEY_ENC_TAB = [
-    46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,
-    27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,
-    37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,
-    22,25,54,21,56,59,6,63,57,62,11,36,20,52,44,34,
-]
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Referer': 'https://www.bilibili.com/',
-}
-_public_session = None
-_login_session = None
-_login_info = None
-_wbi_cache = None
-_wbi_cache_time = 0
-_LOGIN_STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.login_state.json')
-_GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', '')
-_GITHUB_REPO = 'YYYcjj/bilibili-up-digest'
-_GITHUB_STATE_PATH = '.login_state.json'
-
+try:import qrcode;QR_AVAILABLE=True
+except:QR_AVAILABLE=False
+try:from PIL import Image;PIL_AVAILABLE=True
+except:PIL_AVAILABLE=False
+PORT=int(os.environ.get('PORT',3457))
+LLM_API_KEY=os.environ.get('LLM_API_KEY','')
+LLM_API_BASE=os.environ.get('LLM_API_BASE','https://api.openai.com/v1')
+LLM_MODEL=os.environ.get('LLM_MODEL','gpt-4o-mini')
+MIXIN_KEY_ENC_TAB=[46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,52,44,34]
+HEADERS={'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36','Referer':'https://www.bilibili.com/'}
+_public_session=None;_login_session=None;_login_info=None;_wbi_cache=None;_wbi_cache_time=0
+_LOGIN_STATE_FILE=os.path.join(os.path.dirname(os.path.abspath(__file__)),'.login_state.json')
+_GITHUB_TOKEN=os.environ.get('GITHUB_TOKEN','')
+_GITHUB_REPO='YYYcjj/bilibili-up-digest'
+_GITHUB_STATE_PATH='.login_state.json'
 def _save_login_state():
-    """保存登录状态到文件"""
-    if not _login_info: return
-    try:
-        cookies = {}
-        if _login_session:
-            for cookie in _login_session.cookies:
-                if cookie.name in ('SESSDATA', 'bili_jct', 'DedeUserID', 'DedeUserID__ckMd5'):
-                    cookies[cookie.name] = cookie.value
-        with open(_LOGIN_STATE_FILE, 'w') as f:
-            json.dump({'info': _login_info, 'cookies': cookies}, f, ensure_ascii=False)
-        if _GITHUB_TOKEN:
-            _save_to_github()
-    except Exception as e:
-        print(f'[WARN] 保存登录状态失败: {e}')
-
+ if not _login_info:return
+ try:
+  c={}
+  if _login_session:
+   for k in _login_session.cookies:
+    if k.name in('SESSDATA','bili_jct','DedeUserID','DedeUserID__ckMd5'):c[k.name]=k.value
+  with open(_LOGIN_STATE_FILE,'w')as f:json.dump({'info':_login_info,'cookies':c},f,ensure_ascii=False)
+  if _GITHUB_TOKEN:_save_to_github()
+ except:pass
 def _save_to_github():
-    """上传登录状态到 GitHub（持久化）"""
-    try:
-        with open(_LOGIN_STATE_FILE) as f:
-            content = f.read()
-        b64 = base64.b64encode(content.encode()).decode()
-        url = f'https://api.github.com/repos/{_GITHUB_REPO}/contents/{_GITHUB_STATE_PATH}'
-        r = requests.get(url, headers={'Authorization': f'Bearer {_GITHUB_TOKEN}'}, timeout=10)
-        sha = r.json().get('sha', '') if r.status_code == 200 else ''
-        body = {'message': 'save login state', 'content': b64, 'branch': 'main'}
-        if sha:
-            body['sha'] = sha
-        requests.put(url, headers={'Authorization': f'Bearer {_GITHUB_TOKEN}'}, json=body, timeout=10)
-        print('[INFO] 登录状态已同步到 GitHub')
-    except Exception as e:
-        print(f'[WARN] GitHub 同步失败: {e}')
-
+ try:
+  with open(_LOGIN_STATE_FILE)as f:content=f.read()
+  b64=base64.b64encode(content.encode()).decode()
+  url=f'https://api.github.com/repos/{_GITHUB_REPO}/contents/{_GITHUB_STATE_PATH}'
+  r=requests.get(url,headers={'Authorization':f'Bearer {_GITHUB_TOKEN}'},timeout=10)
+  sha=r.json().get('sha','')if r.status_code==200 else''
+  body={'message':'save login state','content':b64,'branch':'main'}
+  if sha:body['sha']=sha
+  requests.put(url,headers={'Authorization':f'Bearer {_GITHUB_TOKEN}'},json=body,timeout=10)
+ except:pass
 def _load_from_github():
-    """从 GitHub 下载登录状态"""
-    try:
-        url = f'https://api.github.com/repos/{_GITHUB_REPO}/contents/{_GITHUB_STATE_PATH}'
-        r = requests.get(url, headers={'Authorization': f'Bearer {_GITHUB_TOKEN}'}, timeout=10)
-        if r.status_code != 200:
-            return
-        data = r.json()
-        decoded = base64.b64decode(data.get('content', '')).decode()
-        with open(_LOGIN_STATE_FILE, 'w') as f:
-            f.write(decoded)
-        print('[INFO] 从 GitHub 恢复登录状态')
-    except Exception as e:
-        print(f'[WARN] GitHub 下载失败: {e}')
-
+ try:
+  url=f'https://api.github.com/repos/{_GITHUB_REPO}/contents/{_GITHUB_STATE_PATH}'
+  r=requests.get(url,headers={'Authorization':f'Bearer {_GITHUB_TOKEN}'},timeout=10)
+  if r.status_code!=200:return
+  decoded=base64.b64decode(r.json().get('content','')).decode()
+  with open(_LOGIN_STATE_FILE,'w')as f:f.write(decoded)
+ except:pass
 def _load_login_state():
-    """从文件加载登录状态"""
-    global _login_session, _login_info
-    if not os.path.exists(_LOGIN_STATE_FILE):
-        if _GITHUB_TOKEN:
-            _load_from_github()
-    if not os.path.exists(_LOGIN_STATE_FILE):
-        return False
-    try:
-        with open(_LOGIN_STATE_FILE) as f:
-            state = json.load(f)
-        _login_info = state.get('info')
-        cookies = state.get('cookies', {})
-        if _login_info and cookies:
-            s = _ensure_login()
-            for name, value in cookies.items():
-                s.cookies.set(name, value, domain='.bilibili.com')
-            try:
-                nav = s.get('https://api.bilibili.com/x/web-interface/nav', timeout=10).json()
-                if nav.get('data', {}).get('isLogin'):
-                    _login_info = {'uid': nav['data']['mid'], 'uname': nav['data']['uname'],
-                                   'face': _fix_url(nav['data'].get('face',''))}
-                    _save_login_state()
-                    return True
-                else:
-                    _login_info = None
-            except: pass
-        return False
-    except: return False
-
-def _fix_url(url):
-    if not url: return url
-    if url.startswith('//'): return 'https:' + url
-    if url.startswith('http://'): return url.replace('http://', 'https://', 1)
-    return url
-
+ global _login_session,_login_info
+ if not os.path.exists(_LOGIN_STATE_FILE):
+  if _GITHUB_TOKEN:_load_from_github()
+ if not os.path.exists(_LOGIN_STATE_FILE):return False
+ try:
+  with open(_LOGIN_STATE_FILE)as f:state=json.load(f)
+  _login_info=state.get('info');cookies=state.get('cookies',{})
+  if _login_info and cookies:
+   s=_ensure_login()
+   for n,v in cookies.items():s.cookies.set(n,v,domain='.bilibili.com')
+   try:
+    nav=s.get('https://api.bilibili.com/x/web-interface/nav',timeout=10).json()
+    if nav.get('data',{}).get('isLogin'):
+     _login_info={'uid':nav['data']['mid'],'uname':nav['data']['uname'],'face':_fix_url(nav['data'].get('face',''))}
+     _save_login_state();return True
+    else:_login_info=None
+   except:pass
+  return False
+ except:return False
+def _fix_url(u):
+ if not u:return u
+ if u.startswith('//'):return'https:'+u
+ if u.startswith('http://'):return u.replace('http://','https://',1)
+ return u
 def _ensure_public():
-    global _public_session
-    if _public_session is None:
-        _public_session = requests.Session()
-        _public_session.headers.update(HEADERS)
-        try: _public_session.get('https://www.bilibili.com/', timeout=10)
-        except: pass
-    return _public_session
-
+ global _public_session
+ if _public_session is None:
+  _public_session=requests.Session();_public_session.headers.update(HEADERS)
+  try:_public_session.get('https://www.bilibili.com/',timeout=10)
+  except:pass
+ return _public_session
 def _ensure_login():
-    global _login_session
-    if _login_session is None:
-        _login_session = requests.Session()
-        _login_session.headers.update(HEADERS)
-    return _login_session
-
+ global _login_session
+ if _login_session is None:_login_session=requests.Session();_login_session.headers.update(HEADERS)
+ return _login_session
 def _get_session():
-    if _login_session is not None and _login_info is not None:
-        return _login_session
-    return _ensure_public()
-
+ if _login_session and _login_info:return _login_session
+ return _ensure_public()
 def _get_wbi_keys():
-    global _wbi_cache, _wbi_cache_time
-    now = time.time()
-    if _wbi_cache and (now - _wbi_cache_time) < 900:
-        return _wbi_cache
-    s = _ensure_public()
-    resp = s.get('https://api.bilibili.com/x/web-interface/nav', timeout=10)
-    data = resp.json()
-    wbi = data['data']['wbi_img']
-    ik = re.search(r'wbi/(.*?)\.', wbi['img_url']).group(1)
-    sk = re.search(r'wbi/(.*?)\.', wbi['sub_url']).group(1)
-    mk = ''.join((ik+sk)[i] for i in MIXIN_KEY_ENC_TAB)[:32]
-    _wbi_cache = {'mixin_key': mk}
-    _wbi_cache_time = now
-    return _wbi_cache
-
-def _sign_params(params):
-    wbi = _get_wbi_keys()
-    params['wts'] = int(time.time())
-    params = dict(sorted(params.items()))
-    query = urlencode(params)
-    params['w_rid'] = hashlib.md5((query + wbi['mixin_key']).encode()).hexdigest()
-    return params
-
+ global _wbi_cache,_wbi_cache_time;now=time.time()
+ if _wbi_cache and(now-_wbi_cache_time)<900:return _wbi_cache
+ s=_ensure_public();r=s.get('https://api.bilibili.com/x/web-interface/nav',timeout=10);d=r.json()
+ w=d['data']['wbi_img'];ik=re.search(r'wbi/(.*?)\.',w['img_url']).group(1);sk=re.search(r'wbi/(.*?)\.',w['sub_url']).group(1)
+ mk=''.join((ik+sk)[i]for i in MIXIN_KEY_ENC_TAB)[:32];_wbi_cache={'mixin_key':mk};_wbi_cache_time=now
+ return _wbi_cache
+def _sign_params(p):
+ w=_get_wbi_keys();p['wts']=int(time.time());p=dict(sorted(p.items()))
+ q=urlencode(p);p['w_rid']=hashlib.md5((q+w['mixin_key']).encode()).hexdigest();return p
 def compute_scores(vid_meta):
-    import math
-    length_str = vid_meta.get('length', '00:00')
-    parts = length_str.split(':')
-    d = max(int(parts[0]) * 60 + int(parts[1]) if len(parts) >= 2 else 60, 10)
-    if d < 60: dur_s = 2
-    elif d < 300: dur_s = 3 + (d-60) / 120
-    elif d < 900: dur_s = 5 + (d-300) / 300
-    elif d < 1800: dur_s = 7
-    else: dur_s = max(3, 8 - (d-1800) / 900)
-    learning = round(dur_s * 0.6 + 1.5, 1)
-    knowledge = round(dur_s * 0.65 + 0.5, 1)
-    horizon = round(max(2, dur_s * 0.55) + 1, 1)
-    overall = round(learning * 0.4 + knowledge * 0.35 + horizon * 0.25, 1)
-    return {k: max(1, min(10, v)) for k, v in {
-        'learning': learning, 'knowledge': knowledge,
-        'horizon': horizon, 'overall': overall,
-    }.items()}
-
-def _bili_get(path, params=None):
-    s = _get_session()
-    resp = s.get('https://api.bilibili.com' + path, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-    if data.get('code') != 0:
-        raise Exception(f"B站API错误({data.get('code')}): {data.get('message','unknown')}")
-    return data
-
+ import math;ls=vid_meta.get('length','00:00');ps=ls.split(':')
+ d=max(int(ps[0])*60+int(ps[1])if len(ps)>=2 else 60,10)
+ if d<60:dur=2
+ elif d<300:dur=3+(d-60)/120
+ elif d<900:dur=5+(d-300)/300
+ elif d<1800:dur=7
+ else:dur=max(3,8-(d-1800)/900)
+ l=round(dur*0.6+1.5,1);k=round(dur*0.65+0.5,1);h=round(max(2,dur*0.55)+1,1);o=round(l*0.4+k*0.35+h*0.25,1)
+ return{x:max(1,min(10,v))for x,v in{'learning':l,'knowledge':k,'horizon':h,'overall':o}.items()}
+def _bili_get(path,params=None):
+ s=_get_session();r=s.get('https://api.bilibili.com'+path,params=params,timeout=15);r.raise_for_status()
+ d=r.json()
+ if d.get('code')!=0:raise Exception(f"B站API({d.get('code')}):{d.get('message','')}")
+ return d
 def summarize_video(vid):
-    if not LLM_API_KEY: return {'topic': vid.get('title',''), 'summary': '未配置AI Key', 'recommendation': '可选', 'category': '未知'}
-    try:
-        prompt = f"""对以下B站视频进行简短概括（30-60字）并给出推荐度：
-
-标题：{vid.get('title','')}
-简介：{(vid.get('description','') or vid.get('desc',''))[:300]}
-时长：{vid.get('length','')}
-
-请用JSON输出：{{"topic":"一句话主题","summary":"30-60字概括","category":"分类标签","recommendation":"强烈推荐/推荐/可选/可跳过"}}"""
-        r = requests.post(f"{LLM_API_BASE}/chat/completions", headers={"Authorization": f"Bearer {LLM_API_KEY}"}, json={"model": LLM_MODEL, "messages": [{"role":"user","content":prompt}], "temperature":0.3, "max_tokens":200}, timeout=20)
-        d = r.json()
-        txt = d['choices'][0]['message']['content'].strip()
-        if '```json' in txt: txt = txt.split('```json')[1].split('```')[0]
-        elif '```' in txt: txt = txt.split('```')[1].split('```')[0]
-        return json.loads(txt)
-    except Exception as e: return {'topic': vid.get('title',''), 'summary': f'AI失败: {str(e)[:50]}', 'recommendation': '可选', 'category': '未知'}
-
+ if not LLM_API_KEY:return{'topic':vid.get('title',''),'summary':'未配置AI Key','recommendation':'可选','category':'未知'}
+ try:
+  p="分析B站视频:"+vid.get('title','')+" 简介:"+((vid.get('description','')or vid.get('desc',''))[:200])+" 输出JSON"
+  r=requests.post(LLM_API_BASE+"/chat/completions",headers={"Authorization":"Bearer "+LLM_API_KEY},json={"model":LLM_MODEL,"messages":[{"role":"user","content":p}],"temperature":0.3,"max_tokens":200},timeout=20)
+  d=r.json();t=d['choices'][0]['message']['content'].strip()
+  if'```json'in t:t=t.split('```json')[1].split('```')[0]
+  elif'```'in t:t=t.split('```')[1].split('```')[0]
+  return json.loads(t)
+ except:return{'topic':vid.get('title',''),'summary':'AI失败','recommendation':'可选'}
 def get_subtitle(bvid):
-    try:
-        info = _bili_get('/x/web-interface/view', {'bvid': bvid})
-        cid = info['data']['cid']
-        player = _bili_get('/x/player/v2', {'bvid': bvid, 'cid': cid})
-        subs = player.get('data', {}).get('subtitle', {}).get('subtitles', [])
-        if not subs: return {'subtitles': [], 'text': '该视频没有字幕'}
-        sub_url = _fix_url(subs[0]['subtitle_url'])
-        sub_resp = requests.get(sub_url, timeout=15)
-        sub_data = sub_resp.json()
-        body = sub_data.get('body', [])
-        text = '\n'.join([f"{i+1}. {item['content']}" for i, item in enumerate(body)])
-        return {'subtitles': [{'lan': subs[0].get('lan',''), 'lan_doc': subs[0].get('lan_doc','')}], 'text': text, 'total': len(body)}
-    except Exception as e: return {'subtitles': [], 'text': f'获取失败: {str(e)}'}
-
-def _get_bilibili_ai(bvid, cid, up_mid=0):
-    try:
-        params = _sign_params({'bvid': bvid, 'cid': cid, 'up_mid': up_mid})
-        data = _bili_get('/x/web-interface/view/conclusion/get', params)
-        d = data.get('data', {})
-        if d.get('code') != 0: return None
-        mr = d.get('model_result', {})
-        summary = mr.get('summary', '')
-        outline = mr.get('outline', [])
-        subtitle_list = mr.get('subtitle', [])
-        subtitle_text = ''
-        if subtitle_list and subtitle_list[0].get('part_subtitle'):
-            parts = subtitle_list[0]['part_subtitle']
-            subtitle_text = '\n'.join([f"[{int(p['start_timestamp'])//60:02d}:{int(p['start_timestamp'])%60:02d}] {p['content']}" for p in parts])
-        return {'summary': summary, 'outline': [{'title': o.get('title',''), 'timestamp': o.get('timestamp',0), 'points': [{'ts': p.get('timestamp',0), 'text': p.get('content','')} for p in o.get('part_outline',[])]} for o in outline], 'subtitle_text': subtitle_text, 'has_summary': bool(summary), 'has_subtitle': bool(subtitle_text)}
-    except: return None
-
-def handle_api(path, query):
-    global _login_session, _login_info
-
-    if path == '/api/login/generate':
-        if not QR_AVAILABLE: return 500, {'error': 'qrcode未安装'}
-        s = _ensure_login()
-        resp = s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/generate', timeout=10)
-        data = resp.json()
-        if data.get('code') != 0: return 500, {'error': data.get('message','')}
-        qr_url = data['data']['url']; qr_key = data['data']['qrcode_key']
-        img = qrcode.make(qr_url); buf = io.BytesIO(); img.save(buf, format='PNG')
-        b64 = base64.b64encode(buf.getvalue()).decode()
-        return 200, {'qrcode_key': qr_key, 'qr_image': f'data:image/png;base64,{b64}'}
-
-    if path == '/api/login/poll':
-        key = query.get('key', [''])[0]
-        if not key: return 400, {'error': '缺少 key'}
-        s = _ensure_login()
-        resp = s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/poll', params={'qrcode_key': key}, timeout=10)
-        data = resp.json()
-        code = data.get('data', {}).get('code', -1)
-        if code == 0:
-            try:
-                nav = s.get('https://api.bilibili.com/x/web-interface/nav', timeout=10).json()
-                if nav.get('data', {}).get('isLogin'):
-                    _login_info = {'uid': nav['data']['mid'], 'uname': nav['data']['uname'], 'face': _fix_url(nav['data'].get('face',''))}
-                    _save_login_state()
-            except: pass
-        return 200, {'code': code, 'message': data.get('data', {}).get('message',''), 'user': _login_info}
-
-    if path == '/api/login/info':
-        return 200, {'logged_in': bool(_login_info), 'user': _login_info}
-
-    if path == '/api/login/logout':
-        _login_session = None
-        _login_info = None
-        if os.path.exists(_LOGIN_STATE_FILE):
-            os.remove(_LOGIN_STATE_FILE)
-        return 200, {'ok': True}
-
-    if path == '/api/followings':
-        if not _login_info: return 401, {'error': '请先登录'}
-        page = int(query.get('page', ['1'])[0])
-        try:
-            s = _login_session
-            resp = s.get('https://api.bilibili.com/x/relation/followings', params={'vmid': _login_info['uid'], 'pn': page, 'ps': 50, 'order': 'desc', 'order_type': 'attention'}, timeout=15)
-            data = resp.json()
-            if data.get('code') != 0: return 500, {'error': data.get('message', 'unknown')}
-            users = []
-            for u in data.get('data', {}).get('list', []):
-                users.append({'mid': u['mid'], 'uname': u['uname'], 'sign': u.get('sign',''), 'face': _fix_url(u.get('face',''))})
-            return 200, {'users': users, 'total': data.get('data',{}).get('total',0)}
-        except Exception as e: return 500, {'error': str(e)}
-
-    if path == '/api/search_up':
-        name = query.get('name', [''])[0]
-        if not name: return 400, {'error': '缺少 name'}
-        try:
-            data = _bili_get('/x/web-interface/search/type', {'search_type': 'bili_user', 'keyword': name})
-            results = []
-            for u in (data.get('data', {}).get('result', []) or []):
-                results.append({'mid': u['mid'], 'uname': u['uname'], 'sign': u.get('usign',''), 'fans': u.get('fans',0), 'videos': u.get('videos',0), 'face': _fix_url(u.get('upic',''))})
-            return 200, {'results': results}
-        except Exception as e: return 500, {'error': str(e)}
-
-    if path == '/api/all_videos':
-        mid = query.get('mid', ['0'])[0]
-        if mid in ('0', 'undefined', '', None):
-            return 400, {'error': 'mid 参数无效'}
-        page = int(query.get('page', ['1'])[0])
-        ps = int(query.get('ps', ['30'])[0])
-        order = query.get('order', ['pubdate'])[0]
-        ps = max(10, min(50, ps))
-        try:
-            params = _sign_params({'mid': mid, 'ps': ps, 'pn': page, 'order': order})
-            data = _bili_get('/x/space/wbi/arc/search', params)
-            vlist = data['data']['list']['vlist']
-            count = data['data']['page']['count']
-            videos = []
-            for v in vlist:
-                videos.append({
-                    'bvid': v['bvid'], 'title': v['title'],
-                    'description': v.get('description',''),
-                    'length': v['length'], 'created': v['created'],
-                    'play': v.get('play',0), 'comment': v.get('comment',0),
-                    'video_review': v.get('video_review',0), 'pic': _fix_url(v.get('pic','')),
-                    'tname': v.get('tname',''),
-                    'scores': compute_scores({'play':v.get('play',0),'length':v['length']}),
-                })
-            return 200, {'videos': videos, 'total': len(videos), 'count': count,
-                         'page': page, 'ps': ps, 'has_more': page * ps < count}
-        except Exception as e: return 500, {'error': str(e)}
-
-    if path == '/api/summarize':
-        bvid = query.get('bvid', [''])[0]
-        if not bvid: return 400, {'error': '缺少 bvid'}
-        try:
-            info = _bili_get('/x/web-interface/view', {'bvid': bvid})
-            vid = info['data']
-            cid = vid['cid']
-            up_mid = vid.get('owner', {}).get('mid', 0)
-            bili_ai = _get_bilibili_ai(bvid, cid, up_mid)
-            if bili_ai and (bili_ai['has_summary'] or bili_ai['has_subtitle']):
-                return 200, {
-                    'source': 'bilibili_ai',
-                    'summary': bili_ai['summary'] or vid.get('title', ''),
-                    'outline': bili_ai['outline'],
-                    'category': vid.get('tname', ''),
-                }
-            vid_data = {
-                'title': vid['title'], 'desc': vid.get('desc',''),
-                'length': vid['duration'],
-                'tname': vid.get('tname',''), 'tags': [t['tag_name'] for t in vid.get('tags',[])][:10]
-            }
-            summary = summarize_video(vid_data)
-            summary['source'] = 'llm'
-            return 200, summary
-        except Exception as e: return 500, {'error': str(e)}
-
-    if path == '/api/subtitle':
-        bvid = query.get('bvid', [''])[0]
-        if not bvid: return 400, {'error': '缺少 bvid'}
-        try:
-            info = _bili_get('/x/web-interface/view', {'bvid': bvid})
-            cid = info['data']['cid']
-            up_mid = info['data'].get('owner', {}).get('mid', 0)
-            bili_ai = _get_bilibili_ai(bvid, cid, up_mid)
-            if bili_ai and bili_ai['has_subtitle']:
-                return 200, {
-                    'source': 'bilibili_ai',
-                    'text': bili_ai['subtitle_text'],
-                    'insufficient': False, 'subtitles': [{'lan': 'zh', 'lan_doc': 'AI字幕'}],
-                }
-            result = get_subtitle(bvid)
-            return 200, result
-        except Exception as e: return 200, {'text': '', 'insufficient': True, 'subtitles': [], 'error': str(e)}
-
-    return 404, {'error': '未知 API'}
-
-
-# ── 前端 HTML ────────────────────────────────────────
-HTML = r'''<!DOCTYPE html>
+ try:
+  info=_bili_get('/x/web-interface/view',{'bvid':bvid});cid=info['data']['cid']
+  player=_bili_get('/x/player/v2',{'bvid':bvid,'cid':cid})
+  subs=player.get('data',{}).get('subtitle',{}).get('subtitles',[])
+  if not subs:return{'subtitles':[],'text':'该视频没有字幕'}
+  sr=requests.get(_fix_url(subs[0]['subtitle_url']),timeout=15);sd=sr.json()
+  body=sd.get('body',[]);text='\n'.join(str(i+1)+'. '+it['content']for i,it in enumerate(body))
+  return{'subtitles':[{'lan':subs[0].get('lan',''),'lan_doc':subs[0].get('lan_doc','')}],'text':text,'total':len(body)}
+ except:return{'subtitles':[],'text':'获取失败'}
+def _get_bilibili_ai(bvid,cid,up_mid=0):
+ try:
+  params=_sign_params({'bvid':bvid,'cid':cid,'up_mid':up_mid});d=_bili_get('/x/web-interface/view/conclusion/get',params)
+  dd=d.get('data',{})
+  if dd.get('code')!=0:return None
+  mr=dd.get('model_result',{});summary=mr.get('summary','');outline=mr.get('outline',[]);sl=mr.get('subtitle',[]);st=''
+  if sl and sl[0].get('part_subtitle'):
+   ps=sl[0]['part_subtitle'];st='\n'.join('['+str(int(p['start_timestamp'])//60).zfill(2)+':'+str(int(p['start_timestamp'])%60).zfill(2)+'] '+p['content']for p in ps)
+  return{'summary':summary,'outline':[{'title':o.get('title',''),'timestamp':o.get('timestamp',0),'points':[{'ts':p.get('timestamp',0),'text':p.get('content','')}for p in o.get('part_outline',[])]}for o in outline],'subtitle_text':st,'has_summary':bool(summary),'has_subtitle':bool(st)}
+ except:return None
+def handle_api(path,query):
+ global _login_session,_login_info
+ if path=='/api/login/generate':
+  if not QR_AVAILABLE:return 500,{'error':'qrcode未安装'}
+  s=_ensure_login();r=s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/generate',timeout=10);d=r.json()
+  if d.get('code')!=0:return 500,{'error':'生成失败'}
+  qr_url=d['data']['url'];qr_key=d['data']['qrcode_key']
+  img=qrcode.make(qr_url);buf=io.BytesIO();img.save(buf,format='PNG');b64=base64.b64encode(buf.getvalue()).decode()
+  return 200,{'qrcode_key':qr_key,'qr_image':'data:image/png;base64,'+b64}
+ if path=='/api/login/poll':
+  key=query.get('key',[''])[0]
+  if not key:return 400,{'error':'缺少key'}
+  s=_ensure_login();r=s.get('https://passport.bilibili.com/x/passport-login/web/qrcode/poll',params={'qrcode_key':key},timeout=10);d=r.json()
+  code=d.get('data',{}).get('code',-1)
+  if code==0:
+   try:
+    nav=s.get('https://api.bilibili.com/x/web-interface/nav',timeout=10).json()
+    if nav.get('data',{}).get('isLogin'):_login_info={'uid':nav['data']['mid'],'uname':nav['data']['uname'],'face':_fix_url(nav['data'].get('face',''))};_save_login_state()
+   except:pass
+  return 200,{'code':code,'message':d.get('data',{}).get('message',''),'user':_login_info}
+ if path=='/api/login/info':return 200,{'logged_in':bool(_login_info),'user':_login_info}
+ if path=='/api/login/logout':_login_session=None;_login_info=None
+ if os.path.exists(_LOGIN_STATE_FILE):os.remove(_LOGIN_STATE_FILE)
+ return 200,{'ok':True}
+ if path=='/api/followings':
+  if not _login_info:return 401,{'error':'请先登录'}
+  page=int(query.get('page',['1'])[0])
+  try:
+   s=_login_session;r=s.get('https://api.bilibili.com/x/relation/followings',params={'vmid':_login_info['uid'],'pn':page,'ps':50,'order':'desc','order_type':'attention'},timeout=15);d=r.json()
+   if d.get('code')!=0:return 500,{'error':d.get('message','')}
+   users=[]
+   for u in d.get('data',{}).get('list',[]):users.append({'mid':u['mid'],'uname':u['uname'],'sign':u.get('sign',''),'face':_fix_url(u.get('face',''))})
+   return 200,{'users':users,'total':d.get('data',{}).get('total',0)}
+  except Exception as e:return 500,{'error':str(e)}
+ if path=='/api/search_up':
+  name=query.get('name',[''])[0]
+  if not name:return 400,{'error':'缺少name'}
+  try:
+   d=_bili_get('/x/web-interface/search/type',{'search_type':'bili_user','keyword':name})
+   results=[]
+   for u in(d.get('data',{}).get('result',[])or[]):results.append({'mid':u['mid'],'uname':u['uname'],'sign':u.get('usign',''),'fans':u.get('fans',0),'videos':u.get('videos',0),'face':_fix_url(u.get('upic',''))})
+   return 200,{'results':results}
+  except Exception as e:return 500,{'error':str(e)}
+ if path=='/api/all_videos':
+  mid_s=query.get('mid',['0'])[0]
+  if mid_s in('0','undefined','',None):return 400,{'error':'mid参数无效'}
+  try:mid=int(mid_s)
+  except(ValueError,TypeError):return 400,{'error':'mid参数无效'}
+  page=int(query.get('page',['1'])[0]);ps=int(query.get('ps',['30'])[0])
+  order=query.get('order',['pubdate'])[0];ps=max(10,min(50,ps))
+  try:
+   params=_sign_params({'mid':mid,'ps':ps,'pn':page,'order':order});d=_bili_get('/x/space/wbi/arc/search',params)
+   vlist=d['data']['list']['vlist'];count=d['data']['page']['count'];videos=[]
+   for v in vlist:videos.append({'bvid':v['bvid'],'title':v['title'],'description':v.get('description',''),'length':v['length'],'created':v['created'],'play':v.get('play',0),'comment':v.get('comment',0),'video_review':v.get('video_review',0),'pic':_fix_url(v.get('pic','')),'tname':v.get('tname',''),'scores':compute_scores({'play':v.get('play',0),'length':v['length']})})
+   return 200,{'videos':videos,'total':len(videos),'count':count,'page':page,'ps':ps,'has_more':page*ps<count}
+  except Exception as e:return 500,{'error':str(e)}
+ if path=='/api/summarize':
+  bvid=query.get('bvid',[''])[0]
+  if not bvid:return 400,{'error':'缺少bvid'}
+  try:
+   info=_bili_get('/x/web-interface/view',{'bvid':bvid});vid=info['data'];cid=vid['cid'];up_mid=vid.get('owner',{}).get('mid',0)
+   bai=_get_bilibili_ai(bvid,cid,up_mid)
+   if bai and(bai['has_summary']or bai['has_subtitle']):return 200,{'source':'bilibili_ai','summary':bai['summary']or vid.get('title',''),'outline':bai['outline'],'category':vid.get('tname','')}
+   s=summarize_video({'title':vid['title'],'desc':vid.get('desc',''),'length':str(vid['duration'])});s['source']='llm';return 200,s
+  except Exception as e:return 500,{'error':str(e)}
+ if path=='/api/subtitle':
+  bvid=query.get('bvid',[''])[0]
+  if not bvid:return 400,{'error':'缺少bvid'}
+  try:
+   info=_bili_get('/x/web-interface/view',{'bvid':bvid});cid=info['data']['cid'];up_mid=info['data'].get('owner',{}).get('mid',0)
+   bai=_get_bilibili_ai(bvid,cid,up_mid)
+   if bai and bai['has_subtitle']:return 200,{'source':'bilibili_ai','text':bai['subtitle_text'],'insufficient':False,'subtitles':[{'lan':'zh','lan_doc':'AI字幕'}]}
+   result=get_subtitle(bvid);return 200,result
+  except:return 200,{'text':'','insufficient':True,'subtitles':[]}
+ return 404,{'error':'未知API'}
+HTML=r'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>B站UP主视频速览 v2</title>
+<title>B站UP主视频速览</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh}
@@ -451,8 +276,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 .pagination button.active{background:#fb7299;color:#fff;border-color:#fb7299;font-weight:600}
 .pagination button:disabled{opacity:.3;cursor:default}
 .vp-section{background:#fff;border-radius:12px;padding:16px;margin:12px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.vp-section .sec-title{font-size:15px;font-weight:600;color:#fb7299;margin-bottom:12px;display:flex;align-items:center;gap:6px}
-.vp-section .ai-badge{font-size:11px;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px}
+.vp-section .sec-title{font-size:15px;font-weight:600;color:#fb7299;margin-bottom:12px;display:flex;align-items:center;gap:6px}.vp-section .ai-badge{font-size:11px;background:#fff3e0;color:#e65100;padding:2px 8px;border-radius:10px}
 .subtitle-text{font-size:14px;color:#444;line-height:2;white-space:pre-wrap;word-break:break-all}
 .outline-wrap{margin:8px 0}.outline-item{margin-bottom:6px}
 .outline-title{font-weight:600;color:#1976d2;font-size:13px;margin-bottom:2px}
@@ -463,6 +287,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 </head>
 <body>
 <script>
+var _origFetch=window.fetch;
+window.fetch=function(u,o){
+if(typeof u==='string'&&u.indexOf('=undefined')>=0)return Promise.resolve(new Response('{"error":"param"}',{status:400,headers:{'Content-Type':'application/json'}}));
+return _origFetch.call(this,u,o);
+};
 (function(){
 var p=new URLSearchParams(location.search);
 var b=p.get('bvid');
