@@ -13,7 +13,7 @@ LLM_API_KEY=os.environ.get('LLM_API_KEY','')
 LLM_API_BASE=os.environ.get('LLM_API_BASE','https://api.openai.com/v1')
 LLM_MODEL=os.environ.get('LLM_MODEL','gpt-4o-mini')
 MIXIN_KEY_ENC_TAB=[46,47,18,2,53,8,23,32,15,50,10,31,58,3,45,35,27,43,5,49,33,9,42,19,29,28,14,39,12,38,41,13,37,48,7,16,24,55,40,61,26,17,0,1,60,51,30,4,22,25,54,21,56,59,6,63,57,62,11,36,20,52,44,34]
-HEADERS={'User-Agent':'Mozilla/5.0','Referer':'https://www.bilibili.com/'}
+HEADERS={'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36','Referer':'https://www.bilibili.com/'}
 _public_session=None;_login_session=None;_login_info=None;_wbi_cache=None;_wbi_cache_time=0
 _LOGIN_STATE_FILE=os.path.join(os.path.dirname(os.path.abspath(__file__)),'.login_state.json')
 def _save_login_state():
