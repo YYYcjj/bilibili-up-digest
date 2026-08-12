@@ -146,6 +146,16 @@ def _ensure_public():
             _public_session.get('https://www.bilibili.com/', timeout=10)
         except:
             pass
+        # 获取 buvid3/buvid4（B站风控必需）
+        try:
+            spi = _public_session.get('https://api.bilibili.com/x/frontend/finger/spi', timeout=10).json()
+            d = spi.get('data', {})
+            if d.get('b_3'):
+                _public_session.cookies.set('buvid3', d['b_3'], domain='.bilibili.com')
+            if d.get('b_4'):
+                _public_session.cookies.set('buvid4', d['b_4'], domain='.bilibili.com')
+        except:
+            pass
     return _public_session
 
 def _ensure_login():
