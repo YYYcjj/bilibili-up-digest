@@ -317,14 +317,12 @@ def handle_api(path, query):
         except Exception as e: return 500, {'error': str(e)}
 
     if path == '/api/all_videos':
-        try:
-            mid = int(query.get('mid', ['0'])[0])
-        except (ValueError, TypeError):
+        mid = query.get('mid', ['0'])[0]
+        if mid in ('0', 'undefined', '', None):
             return 400, {'error': 'mid 参数无效'}
         page = int(query.get('page', ['1'])[0])
         ps = int(query.get('ps', ['30'])[0])
         order = query.get('order', ['pubdate'])[0]
-        if not mid: return 400, {'error': '缺少 mid'}
         ps = max(10, min(50, ps))
         try:
             params = _sign_params({'mid': mid, 'ps': ps, 'pn': page, 'order': order})
@@ -399,7 +397,7 @@ HTML = r'''<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>B站UP主视频速览</title>
+<title>B站UP主视频速览 v2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333;min-height:100vh}
@@ -674,7 +672,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self,*a): pass
 
 if __name__=='__main__':
-    print(f'[INFO] 启动B站UP主视频速览 端口:{PORT}')
+    print(f'[INFO] B站UP主视频速览 端口:{PORT}')
     print(f'[INFO] LLM: {"已配置" if LLM_API_KEY else "未配置"}')
     print(f'[INFO] GitHub持久化: {"已配置" if _GITHUB_TOKEN else "未配置"}')
     if _load_login_state():
