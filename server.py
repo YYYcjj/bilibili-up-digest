@@ -576,6 +576,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;b
 <script>
 var _mid,_page=1,_total,_all=[],PS=30;
 var POLL=null,LOGINED=false,LUID=null;
+var _subText='',_subTitle='';
 (function(){
 var _origFetch=window.fetch;
 window.fetch=function(url,opts){
@@ -721,9 +722,10 @@ _all=v;renderCards(v);
 }
 
 function renderVideoPage(bvid,title){
+_subText='';_subTitle=title||'';
 document.body.innerHTML='<div class="header"><a href="javascript:history.back()">←</a><span class="h-title">'+he(title||'视频详情')+'</span></div>'+
 '<div class="vp-section"><div class="sec-title">🤖 AI 概括分析</div><div id="vsl" style="text-align:center;color:#999;padding:20px">DeepSeek AI 分析中...</div><div id="vsc"></div></div>'+
-'<div class="vp-section"><div class="sec-title" id="sst">📜 视频文字版</div><div id="ssl" style="text-align:center;color:#999;padding:20px">获取文字版中...</div><div id="ssc"></div></div>'+
+'<div class="vp-section"><div class="sec-title"><span id="sst">📜 视频文字版</span><button id="exportBtn" onclick="exportSub()" style="margin-left:auto;padding:4px 12px;background:#fb7299;color:#fff;border:none;border-radius:6px;font-size:12px;cursor:pointer;display:none">⬇️ 导出</button></div><div id="ssl" style="text-align:center;color:#999;padding:20px">获取文字版中...</div><div id="ssc"></div></div>'+
 '<div class="btn-row" style="padding:0 12px 20px"><button onclick="window.open(\'https://www.bilibili.com/video/'+bvid+'\')">▶️ 播放</button></div>';
 loadSummary(bvid);
 loadSub(bvid);
@@ -745,11 +747,21 @@ async function loadSub(bvid){
 try{
 var r=await fetch('/api/subtitle?bvid='+bvid);var d=await r.json();
 document.getElementById('ssl').style.display='none';
-if(d.source==='bilibili_ai')document.getElementById('sst').innerHTML='📜 AI字幕（B站识别）';
-else if(d.subtitles&&d.subtitles.length)document.getElementById('sst').innerHTML='📜 CC字幕 ('+d.subtitles[0].lan_doc+')';
-if(d.text&&d.text.length>20)document.getElementById('ssc').innerHTML='<div class="subtitle-text">'+he(d.text)+'</div>';
+if(d.source==='bilibili_ai')document.getElementById('sst').textContent='📜 AI字幕（B站识别）';
+else if(d.subtitles&&d.subtitles.length)document.getElementById('sst').textContent='📜 CC字幕 ('+d.subtitles[0].lan_doc+')';
+if(d.text&&d.text.length>20){_subText=d.text;document.getElementById('ssc').innerHTML='<div class="subtitle-text">'+he(d.text)+'</div>';var eb=document.getElementById('exportBtn');if(eb)eb.style.display='inline-block';}
 else document.getElementById('ssc').innerHTML='<div style="color:#999;text-align:center;padding:20px">'+(d.text||'暂无可用的文字版内容')+'</div>';
 }catch(e){document.getElementById('ssl').style.display='none';document.getElementById('ssc').innerHTML='<div style="color:#e74c3c;text-align:center;padding:10px">获取失败</div>'}
+}
+function exportSub(){
+if(!_subText){alert('暂无字幕可导出');return}
+var name=(_subTitle||'bilibili_subtitle').replace(/[\\/:*?"<>|]/g,'_').slice(0,80);
+var blob=new Blob(['\ufeff'+_subText],{type:'text/plain;charset=utf-8'});
+var a=document.createElement('a');
+a.href=URL.createObjectURL(blob);
+a.download=name+'.txt';
+document.body.appendChild(a);a.click();a.remove();
+setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
 }
 </script>
 </body>
